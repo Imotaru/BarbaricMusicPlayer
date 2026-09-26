@@ -8,6 +8,11 @@ public sealed class PlayQueue
 
     public int Count => _ids.Count;
 
+    public IReadOnlyList<long> Ids => _ids;
+
+    /// <summary>Where <see cref="Current"/> sits in <see cref="Ids"/>, or -1 when the queue is empty.</summary>
+    public int Index => _index;
+
     public long? Current => _index >= 0 && _index < _ids.Count ? _ids[_index] : null;
 
     public bool HasNext => _index + 1 < _ids.Count;
@@ -21,6 +26,20 @@ public sealed class PlayQueue
     }
 
     public void Clear() => Set([], 0);
+
+    /// <summary>Takes songs out of the queue. The current song stays, so playback carries on from it.</summary>
+    public void Remove(IEnumerable<long> ids)
+    {
+        var removed = ids.ToHashSet();
+        if (Current is { } current)
+        {
+            removed.Remove(current);
+        }
+
+        var before = _ids.Take(Math.Max(_index, 0)).Count(removed.Contains);
+        _ids.RemoveAll(removed.Contains);
+        _index = _ids.Count == 0 ? -1 : Math.Clamp(_index - before, 0, _ids.Count - 1);
+    }
 
     public bool MoveNext()
     {

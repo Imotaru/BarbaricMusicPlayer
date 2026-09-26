@@ -51,6 +51,9 @@ public sealed class Track
 
     public bool Missing { get; set; }
 
+    /// <summary>Hidden from the library by the user; unlike <see cref="Missing"/>, a rescan leaves it alone.</summary>
+    public bool Hidden { get; set; }
+
     public long AddedUtc { get; set; }
 }
 
@@ -73,6 +76,10 @@ public sealed class TrackRow
     public string? BpmSource { get; set; }
 
     public double? BpmConfidence { get; set; }
+
+    public long PlayCount { get; set; }
+
+    public long SkipCount { get; set; }
 
     /// <summary>Zero-based place in the manual playlist being shown; null in other views.</summary>
     public int? Position { get; set; }
@@ -97,6 +104,8 @@ public enum TrackSort
     Duration,
     Bpm,
     Added,
+    Plays,
+    Skips,
 
     /// <summary>Manual playlist order. Only meaningful with <see cref="TrackQuery.PlaylistId"/>.</summary>
     Position,
@@ -133,6 +142,19 @@ public sealed record BpmRange(double? Min = null, double? Max = null, bool Inclu
     public bool IsOpen => Min is null && Max is null;
 }
 
+/// <summary>Which part of the library a query looks at.</summary>
+public enum TrackScope
+{
+    /// <summary>Every song that is neither missing nor hidden.</summary>
+    Library,
+
+    /// <summary>Visible songs flagged for being skipped a lot.</summary>
+    Suggested,
+
+    /// <summary>Songs the user hid from the library.</summary>
+    Hidden,
+}
+
 /// <summary>
 /// What the library list is showing: search text, sort order, an optional filter, and optionally a
 /// manual playlist to show instead of the whole library. <see cref="Bpm"/> is the BPM range the user
@@ -144,7 +166,8 @@ public sealed record TrackQuery(
     bool Descending = false,
     TrackFilter? Filter = null,
     long? PlaylistId = null,
-    BpmRange? Bpm = null);
+    BpmRange? Bpm = null,
+    TrackScope Scope = TrackScope.Library);
 
 /// <summary>A track's tempo and where it came from, as sent to the UI after it changes.</summary>
 public sealed record BpmInfo(long Id, double? Bpm, string? BpmSource, double? BpmConfidence);

@@ -21,8 +21,18 @@
     { key: 'album', label: 'Album', optional: true },
     { key: null, label: 'Tags', optional: true },
     { key: 'bpm', label: 'BPM', numeric: true, optional: true },
+    { key: 'plays', label: 'Plays', numeric: true, optional: true },
+    { key: 'skips', label: 'Skips', numeric: true, optional: true },
     { key: 'duration', label: 'Time', numeric: true },
   ])
+
+  const placeholders = {
+    library: 'Search songs, artists, albums…',
+    suggested: 'Search these songs…',
+    hidden: 'Search hidden songs…',
+    filter: 'Search this playlist…',
+    manual: 'Search this playlist…',
+  }
 
   let viewport = $state<HTMLDivElement>()
   let scrollTop = $state(0)
@@ -87,7 +97,7 @@
       <input
         id="search"
         type="search"
-        placeholder={library.view.kind === 'library' ? 'Search songs, artists, albums…' : 'Search this playlist…'}
+        placeholder={placeholders[library.view.kind]}
         autocomplete="off"
         spellcheck="false"
         value={library.text}
@@ -150,6 +160,12 @@
           {#if library.lensActive}
             <button class="cta" onclick={library.resetLens}>Show every BPM</button>
           {/if}
+        {:else if library.view.kind === 'suggested'}
+          <p class="big">Nothing to suggest yet</p>
+          <p>Songs you skip most of the time show up here, so you can decide whether to keep them.</p>
+        {:else if library.view.kind === 'hidden'}
+          <p class="big">No hidden songs</p>
+          <p>Songs you hide stay on disk but out of your library. Hide one with <kbd>H</kbd>.</p>
         {:else if library.view.kind === 'manual'}
           <p class="big">This playlist is empty</p>
           <p>Select songs anywhere in your library and press <kbd>P</kbd> to add them.</p>
@@ -207,6 +223,8 @@
                 title={describeBpm(row)}
                 ondblclick={onBpmDblclick}
               >{formatBpm(row)}</span>
+              <span class="cell numeric dim optional">{row.playCount || ''}</span>
+              <span class="cell numeric dim optional">{row.skipCount || ''}</span>
               <span class="cell numeric dim">{row.durationMs ? formatTime(row.durationMs / 1000) : ''}</span>
             {/if}
           </div>
@@ -218,7 +236,7 @@
 
 <style>
   .tracks {
-    --columns: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px 64px;
+    --columns: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px 60px 60px 64px;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -226,7 +244,7 @@
   }
 
   .tracks.numbered {
-    --columns: 36px minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px 64px;
+    --columns: 36px minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px 60px 60px 64px;
   }
 
   .toolbar {

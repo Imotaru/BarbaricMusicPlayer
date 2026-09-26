@@ -1,9 +1,14 @@
 <script lang="ts">
   import { library, songs } from './library.svelte'
 
-  const title = $derived(library.view.kind === 'library' ? 'All songs' : (library.playlist?.name ?? ''))
+  const titles = { library: 'All songs', suggested: 'Suggested for removal', hidden: 'Hidden songs' }
+  const title = $derived(
+    library.view.kind === 'filter' || library.view.kind === 'manual'
+      ? (library.playlist?.name ?? '')
+      : titles[library.view.kind],
+  )
   const count = $derived(
-    library.view.kind === 'library' && library.narrowed
+    library.view.kind !== 'filter' && library.view.kind !== 'manual' && library.narrowed
       ? `${library.total.toLocaleString()} ${library.total === 1 ? 'match' : 'matches'}`
       : songs(library.total),
   )
@@ -33,6 +38,20 @@
     {:else if library.view.kind === 'library' && library.narrowed}
       <button class="ghost" onclick={library.saveViewAsPlaylist} title="Keep this search and filter as a playlist that updates itself">
         Save as playlist
+      </button>
+    {:else if library.view.kind === 'suggested' && library.total > 0}
+      <button class="ghost" onclick={library.keepSelected} title="Start the selected songs' play and skip counts over (K)">
+        Keep
+      </button>
+      <button class="ghost" onclick={library.hideSelected} title="Take the selected songs out of the library, but leave the files alone (H)">
+        Hide
+      </button>
+      <button class="danger" onclick={library.confirmRecycle} title="Move the selected songs' files to the Recycle Bin (Del)">
+        Delete…
+      </button>
+    {:else if library.view.kind === 'hidden' && library.total > 0}
+      <button class="ghost" onclick={library.unhideSelected} title="Put the selected songs back in the library (H)">
+        Unhide
       </button>
     {/if}
   </div>
@@ -114,5 +133,15 @@
     border: 0;
     background: var(--accent);
     color: var(--accent-contrast);
+  }
+
+  .danger {
+    border: 1px solid color-mix(in srgb, var(--danger) 55%, transparent);
+    background: transparent;
+    color: var(--danger);
+  }
+
+  .danger:hover {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
   }
 </style>

@@ -2,6 +2,7 @@
   import { openBpmEditor, openPlaylistPicker, openTagPicker } from './lib/actions'
   import BpmEditor from './lib/BpmEditor.svelte'
   import { call, hasHost } from './lib/bridge'
+  import ConfirmDialog from './lib/ConfirmDialog.svelte'
   import ContextMenu from './lib/ContextMenu.svelte'
   import { library } from './lib/library.svelte'
   import Picker from './lib/Picker.svelte'
@@ -22,7 +23,8 @@
 
   // A playlist deleted elsewhere (or from its own menu) can't stay open.
   $effect(() => {
-    if (library.view.kind !== 'library' && playlists.loaded && !playlists.byId.has(library.view.id)) {
+    const view = library.view
+    if ((view.kind === 'filter' || view.kind === 'manual') && playlists.loaded && !playlists.byId.has(view.id)) {
       library.openLibrary()
     }
   })
@@ -97,9 +99,20 @@
     } else if (e.key === 'p' || e.key === 'P') {
       e.preventDefault()
       openPlaylistPicker()
+    } else if (e.key === 's' || e.key === 'S') {
+      e.preventDefault()
+      player.toggleShuffle()
+    } else if (e.key === 'h' || e.key === 'H') {
+      e.preventDefault()
+      if (library.view.kind === 'hidden') library.unhideSelected()
+      else library.hideSelected()
+    } else if ((e.key === 'k' || e.key === 'K') && library.view.kind === 'suggested') {
+      e.preventDefault()
+      library.keepSelected()
     } else if (e.key === 'Delete') {
       e.preventDefault()
-      library.removeSelectedFromPlaylist()
+      if (library.view.kind === 'manual') library.removeSelectedFromPlaylist()
+      else if (library.view.kind === 'suggested' || library.view.kind === 'hidden') library.confirmRecycle()
     } else if (e.key === 'Escape') {
       if (!library.clearSelection() && library.hasFilter) library.clearFilter()
     }
@@ -138,6 +151,11 @@
 {#if ui.bpmEditor}
   {#key ui.bpmEditor}
     <BpmEditor trackIds={ui.bpmEditor.trackIds} at={ui.bpmEditor} />
+  {/key}
+{/if}
+{#if ui.confirm}
+  {#key ui.confirm}
+    <ConfirmDialog confirm={ui.confirm} />
   {/key}
 {/if}
 <Toast />

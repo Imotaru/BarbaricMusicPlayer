@@ -33,11 +33,11 @@ public sealed class PlaylistRepository(LibraryDatabase database)
     {
         using var connection = database.Open();
         var rows = await connection.QueryAsync<PlaylistRecord>(
-            """
+            $"""
             SELECT p.id, p.name, p.kind, p.filter_json,
                    CASE WHEN p.kind = 'manual' THEN
                        (SELECT count(*) FROM playlist_tracks pt JOIN tracks t ON t.id = pt.track_id
-                        WHERE pt.playlist_id = p.id AND t.missing = 0)
+                        WHERE pt.playlist_id = p.id AND {TrackRepository.Visible})
                    END AS count
             FROM playlists p
             ORDER BY p.position, p.id
@@ -157,7 +157,7 @@ public sealed class PlaylistRepository(LibraryDatabase database)
 
     internal static string SerializeQuery(TrackQuery query) =>
         JsonSerializer.Serialize(
-            query with { PlaylistId = null, Bpm = null, Filter = query.Filter is { IsEmpty: false } ? query.Filter : null },
+            query with { PlaylistId = null, Bpm = null, Scope = TrackScope.Library, Filter = query.Filter is { IsEmpty: false } ? query.Filter : null },
             JsonOptions);
 
     /// <summary>Reads a saved view. A damaged one comes back as the plain library view rather than failing.</summary>

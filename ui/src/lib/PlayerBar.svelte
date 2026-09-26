@@ -27,6 +27,20 @@
 
   <div class="center">
     <div class="transport">
+      <button
+        class="icon"
+        class:on={player.shuffle}
+        onclick={player.toggleShuffle}
+        aria-pressed={player.shuffle}
+        aria-label="Shuffle (S)"
+        title={player.shuffle ? 'Shuffle is on: songs you often skip come up less (S)' : 'Shuffle (S)'}
+      >
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04z"
+          />
+        </svg>
+      </button>
       <button class="icon" onclick={player.previous} disabled={!player.loaded} aria-label="Previous (Ctrl+←)">
         <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
       </button>
@@ -45,6 +59,8 @@
       <button class="icon" onclick={player.next} disabled={!player.hasNext} aria-label="Next (Ctrl+→)">
         <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
       </button>
+      <!-- Balances the shuffle button so Play stays centred. -->
+      <span class="icon" aria-hidden="true"></span>
     </div>
 
     <div class="seek">
@@ -173,6 +189,11 @@
 
   .icon:disabled {
     opacity: 0.35;
+  }
+
+  .icon.on,
+  .icon.on:hover {
+    color: var(--accent);
   }
 
   .icon svg {

@@ -51,7 +51,14 @@ public partial class MainWindow : Window
             _bpm?.Dispose();
             _library?.Dispose();
             _player?.Dispose();
-            _controller?.Dispose();
+
+            // Off the UI thread: waiting on it here would block the continuations the save needs.
+            if (_controller is { } controller)
+            {
+                Task.Run(controller.CloseAsync).Wait(TimeSpan.FromSeconds(2));
+                controller.Dispose();
+            }
+
             _engine.Dispose();
         };
     }
@@ -105,12 +112,14 @@ public partial class MainWindow : Window
         var database = new LibraryDatabase(
             Environment.GetEnvironmentVariable("BARBARIC_LIBRARY_DB") ?? LibraryDatabase.DefaultPath);
         var tracks = new TrackRepository(database);
-        _controller = new PlaybackController(_engine, tracks, SynchronizationContext.Current);
+        var stats = new PlayStatsRepository(database);
+        _controller = new PlaybackController(_engine, tracks, stats, SynchronizationContext.Current);
 
         _bridge = new WebBridge(core, Dispatcher, origin);
         RegisterWindowApi(_bridge);
         _player = new PlayerApi(_engine, _controller, _bridge, this);
-        _library = new LibraryApi(new FolderRepository(database), tracks, new LibraryScanner(database), _bridge, this);
+        _library = new LibraryApi(
+            new FolderRepository(database), tracks, stats, _controller, new LibraryScanner(database), _bridge, this);
         _ = new TagApi(new TagRepository(database), _bridge);
         _ = new PlaylistApi(new PlaylistRepository(database), _bridge);
         _bpm = new BpmApi(new BpmBackgroundAnalyzer(tracks), tracks, _bridge);

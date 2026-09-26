@@ -42,9 +42,14 @@ public sealed class PlayerApi : IDisposable
         bridge.CommandAsync("player.play", _ => _engine.PlayAsync());
         bridge.Command("player.pause", _ => _engine.Pause());
         bridge.CommandAsync("player.toggle", _ => _engine.TogglePlayPauseAsync());
-        bridge.Command("player.stop", _ => _engine.Stop());
+        bridge.CommandAsync("player.stop", _ => _controller.StopAsync());
         bridge.CommandAsync("player.next", _ => _controller.NextAsync());
         bridge.CommandAsync("player.previous", _ => _controller.PreviousAsync());
+        bridge.CommandAsync("player.setShuffle", async p =>
+        {
+            await _controller.SetShuffleAsync(p.GetProperty("on").GetBoolean());
+            EmitState();
+        });
         bridge.Command("player.seek", p =>
         {
             _engine.Seek(TimeSpan.FromSeconds(p.GetProperty("seconds").GetDouble()));
@@ -65,6 +70,7 @@ public sealed class PlayerApi : IDisposable
         _engine.StateChanged += OnEngineStateChanged;
         _engine.PlaybackFailed += OnEnginePlaybackFailed;
         _controller.Error += OnControllerError;
+        _controller.ListenRecorded += OnListenRecorded;
 
         _positionTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => EmitPosition(), _dispatcher);
     }
@@ -77,6 +83,7 @@ public sealed class PlayerApi : IDisposable
         _engine.StateChanged -= OnEngineStateChanged;
         _engine.PlaybackFailed -= OnEnginePlaybackFailed;
         _controller.Error -= OnControllerError;
+        _controller.ListenRecorded -= OnListenRecorded;
     }
 
     private async Task<PlayerSnapshot?> OpenFileAsync()
@@ -103,6 +110,9 @@ public sealed class PlayerApi : IDisposable
     private void OnControllerError(object? sender, string message) =>
         _bridge.Emit("player.error", new { message });
 
+    // Play and skip counts show in the list, and the flag decides what's in the suggestions.
+    private void OnListenRecorded(object? sender, ListenRecord e) => _bridge.Emit("library.changed");
+
     private void EmitState() => _bridge.Emit("player.state", Snapshot());
 
     private void EmitPosition() => _bridge.Emit("player.position", new { position = _engine.Position.TotalSeconds });
@@ -123,7 +133,8 @@ public sealed class PlayerApi : IDisposable
             _engine.TrackGainDb,
             _engine.MasterVolume,
             _controller.Queue.HasNext,
-            _controller.Queue.HasPrevious);
+            _controller.Queue.HasPrevious,
+            _controller.Shuffle);
     }
 
     private sealed record PlayerSnapshot(
@@ -138,5 +149,6 @@ public sealed class PlayerApi : IDisposable
         double TrackGainDb,
         float Volume,
         bool HasNext,
-        bool HasPrevious);
+        bool HasPrevious,
+        bool Shuffle);
 }

@@ -39,11 +39,26 @@ export function openRowMenu(at: Point, index: number) {
     { label: 'Halve BPM', action: () => bpm.scaleSelected(0.5) },
     { label: count > 1 ? `Analyze BPM of ${songs(count)}` : 'Analyze BPM', action: bpm.analyzeSelected },
   ]
-  if (library.view.kind === 'manual') {
-    items.push(
-      { separator: true },
-      { label: 'Remove from playlist', shortcut: 'Del', danger: true, action: library.removeSelectedFromPlaylist },
-    )
+  items.push({ separator: true })
+  const hide: MenuItem = { label: 'Hide from library', shortcut: 'H', action: library.hideSelected }
+  const recycle: MenuItem = { label: 'Delete file…', shortcut: 'Del', danger: true, action: library.confirmRecycle }
+  switch (library.view.kind) {
+    case 'suggested':
+      items.push({ label: 'Keep', shortcut: 'K', action: library.keepSelected }, hide, recycle)
+      break
+    case 'hidden':
+      items.push({ label: 'Unhide', shortcut: 'H', action: library.unhideSelected }, recycle)
+      break
+    case 'manual':
+      items.push(hide, {
+        label: 'Remove from playlist',
+        shortcut: 'Del',
+        danger: true,
+        action: library.removeSelectedFromPlaylist,
+      })
+      break
+    default:
+      items.push(hide)
   }
   ui.openMenu(at, items)
 }
@@ -82,7 +97,8 @@ export function openPlaylistMenu(at: Point, playlist: Playlist) {
   if (playlist.kind === 'filter') {
     items.push({
       label: 'Update from current view',
-      disabled: library.view.kind === 'manual',
+      // Only the library and filter views are searches that can be saved.
+      disabled: library.view.kind !== 'library' && library.view.kind !== 'filter',
       action: () =>
         ui.run(async () => {
           await playlists.updateFilter(playlist.id, library.context)
@@ -103,7 +119,7 @@ export function openPlaylistMenu(at: Point, playlist: Playlist) {
             danger: true,
             action: () =>
               ui.run(async () => {
-                if (library.view.kind !== 'library' && library.view.id === playlist.id) library.openLibrary()
+                if (library.playlist?.id === playlist.id) library.openLibrary()
                 await playlists.remove(playlist.id)
               }),
           },

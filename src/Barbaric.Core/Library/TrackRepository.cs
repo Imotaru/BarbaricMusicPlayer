@@ -10,10 +10,13 @@ public sealed class TrackRepository(LibraryDatabase database)
 
     public const double MaxManualBpm = 400;
 
-    private const string PendingBpm = "missing = 0 AND bpm IS NULL AND bpm_source IS NULL";
+    /// <summary>The songs the library shows, for queries that alias <c>tracks</c> as <c>t</c>.</summary>
+    internal const string Visible = "t.missing = 0 AND t.hidden = 0";
+
+    private const string PendingBpm = "missing = 0 AND hidden = 0 AND bpm IS NULL AND bpm_source IS NULL";
 
     private const string RowColumns =
-        "t.id, t.title, t.artist, t.album, t.duration_ms, t.bpm, t.bpm_source, t.bpm_confidence, " +
+        "t.id, t.title, t.artist, t.album, t.duration_ms, t.bpm, t.bpm_source, t.bpm_confidence, t.play_count, t.skip_count, " +
         "(SELECT group_concat(tag_id) FROM track_tags WHERE track_id = t.id) AS tag_id_list";
 
     /// <summary>Returns one page of the list plus the total number of matching tracks.</summary>
@@ -184,7 +187,15 @@ public sealed class TrackRepository(LibraryDatabase database)
     {
         var parameters = new DynamicParameters();
         var from = "FROM tracks t";
-        var where = new List<string> { "t.missing = 0" };
+        var where = new List<string>
+        {
+            query.Scope switch
+            {
+                TrackScope.Suggested => $"{Visible} AND t.flagged = 1",
+                TrackScope.Hidden => "t.missing = 0 AND t.hidden = 1",
+                _ => Visible,
+            },
+        };
 
         if (query.PlaylistId is { } playlistId)
         {
@@ -267,6 +278,8 @@ public sealed class TrackRepository(LibraryDatabase database)
             TrackSort.Duration => $"t.duration_ms {dir}, t.title COLLATE NOCASE",
             TrackSort.Bpm => $"t.bpm IS NULL, t.bpm {dir}, t.title COLLATE NOCASE",
             TrackSort.Added => $"t.added_utc {dir}",
+            TrackSort.Plays => $"t.play_count {dir}, t.title COLLATE NOCASE",
+            TrackSort.Skips => $"t.skip_count {dir}, t.title COLLATE NOCASE",
             TrackSort.Position when query.PlaylistId is not null => $"pt.position {dir}",
             _ => $"t.artist IS NULL, t.artist COLLATE NOCASE {dir}, t.album COLLATE NOCASE {dir}, t.track_number, t.title COLLATE NOCASE",
         };

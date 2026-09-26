@@ -1,6 +1,9 @@
 // The shape of list queries as the host understands them (see TrackQuery / TrackFilter in Barbaric.Core).
 
-export type SortKey = 'artist' | 'title' | 'album' | 'duration' | 'bpm' | 'added' | 'position'
+export type SortKey = 'artist' | 'title' | 'album' | 'duration' | 'bpm' | 'added' | 'plays' | 'skips' | 'position'
+
+/** Which part of the library a query looks at: visible songs, the ones suggested for removal, or hidden ones. */
+export type TrackScope = 'library' | 'suggested' | 'hidden'
 
 /** Tag and BPM constraints. Empty lists and nulls mean "no constraint". */
 export interface TrackFilter {
@@ -46,6 +49,7 @@ export interface QueryContext {
   playlistId: number | null
   /** The BPM range narrowing every view. Never saved with a playlist. */
   bpm: BpmRange | null
+  scope: TrackScope
 }
 
 /** A filter playlist's saved view, as the host returns it. */

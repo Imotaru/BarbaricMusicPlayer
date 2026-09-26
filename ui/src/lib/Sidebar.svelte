@@ -11,7 +11,7 @@
   const progress = $derived(library.scan.total > 0 ? (library.scan.processed / library.scan.total) * 100 : 0)
   const bpmProgress = $derived(bpm.status.total > 0 ? (bpm.status.done / bpm.status.total) * 100 : 0)
 
-  const isActive = (p: Playlist) => library.view.kind !== 'library' && library.view.id === p.id
+  const isActive = (p: Playlist) => library.playlist?.id === p.id
   const isRenaming = (kind: 'tag' | 'playlist', id: number) => ui.renaming?.kind === kind && ui.renaming.id === id
   const stopRenaming = () => (ui.renaming = null)
 
@@ -41,6 +41,27 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 12.5V3.5l7-1.5v9" /><circle cx="4.5" cy="12.5" r="1.8" /><circle cx="11.5" cy="11" r="1.8" /></svg>
         <span class="name">All songs</span>
       </button>
+      <button
+        class="item"
+        class:active={library.view.kind === 'suggested'}
+        onclick={library.openSuggested}
+        title="Songs you skip most of the time"
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5 10 8l-7 4.5zM12.5 3.5v9" /></svg>
+        <span class="name">Suggested for removal</span>
+        {#if library.counts.suggested > 0}
+          <span class="count">{library.counts.suggested.toLocaleString()}</span>
+        {/if}
+      </button>
+      {#if library.counts.hidden > 0 || library.view.kind === 'hidden'}
+        <button class="item" class:active={library.view.kind === 'hidden'} onclick={library.openHidden}>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M1.5 8S3.9 3.5 8 3.5 14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /><path d="m2.5 13.5 11-11" />
+          </svg>
+          <span class="name">Hidden songs</span>
+          <span class="count">{library.counts.hidden.toLocaleString()}</span>
+        </button>
+      {/if}
     </nav>
 
     <section>

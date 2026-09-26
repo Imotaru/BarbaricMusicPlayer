@@ -20,6 +20,7 @@ public sealed class LibraryFixture : IDisposable
         Tags = new TagRepository(Database);
         Playlists = new PlaylistRepository(Database);
         Scanner = new LibraryScanner(Database);
+        Stats = new PlayStatsRepository(Database, Clock);
     }
 
     public string Root { get; }
@@ -37,6 +38,10 @@ public sealed class LibraryFixture : IDisposable
     public TagRepository Tags { get; }
 
     public PlaylistRepository Playlists { get; }
+
+    public ManualClock Clock { get; } = new(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+
+    public PlayStatsRepository Stats { get; }
 
     /// <summary>Writes a short tone (unique per call, so fingerprints differ) and tags it.</summary>
     public string AddSong(

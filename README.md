@@ -5,7 +5,7 @@ A lightweight Windows music player for local files. Planned features:
 - BPM detection, plus filtering by BPM range
 - tag-based playlists
 - instant search
-- skip-aware shuffle
+- skip-aware shuffle, with suggestions for songs you always skip
 
 ## Stack
 
@@ -81,6 +81,24 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
 - **Manual playlists:** press P to add the selection to a playlist or start a new one. A song appears at most once in a playlist. Sort by # to keep the playlist's own order: Alt+↑/↓ moves the selection, and Del removes it.
 - **Renaming:** double-click a playlist or tag in the sidebar, or right-click it to rename, recolour or delete it.
 
+## Plays, skips and shuffle
+
+- **Counting:** each time you leave a song, the player logs how much of it played.
+  - Pressing Next, or picking another song, before 30% of it has played counts as a skip.
+  - Playing 80% or more of it, or to the end, counts as a play.
+  - Anything in between, and Previous, Stop or closing the app, updates "last played" without counting either way.
+  - The Plays and Skips columns show the counts, and sort by them.
+- **Smart shuffle:** press S (or the shuffle button) to shuffle the list you're playing from, without repeats.
+  - Songs you tend to skip come up later, and so do songs you heard in the last day or so.
+  - Nothing is ruled out: even a song you always skip still turns up now and then.
+  - The playing song carries on when shuffle is switched on or off.
+- **Suggested for removal:** a song you have skipped at least 5 times, and most of the times it came on, shows up in this sidebar view. For each one you can:
+  - **Keep** it (K): its counts start over.
+  - **Hide** it (H): it stays on disk but leaves the library, playlists and tag counts. Hidden songs are listed under "Hidden songs", where H unhides them again.
+  - **Delete** the file (Del): after you confirm, it moves to the Recycle Bin. If you restore it from there, the next scan brings it back with its history.
+
+  A song that wins you back drops off the list by itself.
+
 ## Tests
 
 ```bash
@@ -109,7 +127,10 @@ Release builds run `npm run build` automatically and copy `ui/dist` into `wwwroo
 | P | Add the selected songs to a playlist |
 | B | Edit the BPM of the selected songs (in the editor: T taps the tempo, Enter saves) |
 | Alt+↑ / Alt+↓ | Move the selected songs within a manual playlist |
-| Del | Remove the selected songs from the manual playlist |
+| S | Shuffle on / off |
+| H | Hide the selected songs (in Hidden songs: unhide them) |
+| K | Keep the selected songs (in Suggested for removal) |
+| Del | Remove the selected songs from the manual playlist; in Suggested for removal and Hidden songs, move their files to the Recycle Bin |
 | Esc | Clear the selection, then the filter (the BPM range slider stays; reset it with its ×) |
 | Ctrl+F or / | Search (↑/↓ and Enter work from the search box; Esc clears it) |
 | Ctrl+O | Open a file |

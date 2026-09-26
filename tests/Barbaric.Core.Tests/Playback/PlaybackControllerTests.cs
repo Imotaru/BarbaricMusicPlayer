@@ -17,6 +17,7 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
     private readonly PlaybackController _controller;
     private readonly List<string> _errors = [];
     private readonly Dictionary<string, long> _ids = [];
+    private readonly List<ListenRecord> _listens = [];
 
     public PlaybackControllerTests()
     {
@@ -26,7 +27,9 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
             _outputs.Add(output);
             return Task.FromResult<IWavePlayer>(output);
         });
-        _controller = new PlaybackController(_engine, _library.Tracks);
+        _controller = new PlaybackController(
+            _engine, _library.Tracks, _library.Stats, clock: _library.Clock, random: new Random(1234));
+        _controller.ListenRecorded += (_, record) => _listens.Add(record);
         _controller.Error += (_, message) => _errors.Add(message);
     }
 
@@ -185,6 +188,211 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
 
         Assert.Equal((1, _ids["A"]), (_controller.Queue.Count, _controller.Queue.Current));
     }
+
+    [Fact]
+    public async Task Next_EarlyInASong_CountsAsASkip()
+    {
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+        _engine.Seek(TimeSpan.FromSeconds(0.5));
+
+        await _controller.NextAsync();
+
+        Assert.Equal(new ListenRecord(_ids["A"], PlayKind.Skip, false), Assert.Single(_listens));
+        Assert.Equal(1, (await TrackAsync("A")).SkipCount);
+    }
+
+    [Fact]
+    public async Task PickingAnotherSong_EarlyOn_CountsAsASkip_ButLateOn_AsAPlay()
+    {
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+        await _controller.PlayTrackAsync(_ids["B"], ByTitle);
+        _engine.Seek(TimeSpan.FromSeconds(4.5));
+        await _controller.PlayTrackAsync(_ids["C"], ByTitle);
+
+        Assert.Equal([PlayKind.Skip, PlayKind.Complete], _listens.Select(l => l.Kind));
+    }
+
+    [Fact]
+    public async Task ASongThatEnds_CountsAsAPlay()
+    {
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+
+        CurrentOutput.DrainToEnd();
+        await WaitUntil(() => _controller.CurrentTrack?.Title == "B");
+
+        var a = await TrackAsync("A");
+        Assert.Equal((1, 0), (a.PlayCount, a.SkipCount));
+        Assert.Equal(_library.Clock.Now.UtcTicks, a.LastPlayedUtc);
+    }
+
+    [Fact]
+    public async Task TheLastSongEnding_IsCountedToo()
+    {
+        await _controller.PlayTrackAsync(_ids["C"], ByTitle);
+
+        CurrentOutput.DrainToEnd();
+        await WaitUntil(() => _listens.Count == 1);
+
+        Assert.Equal(PlayKind.Complete, _listens[0].Kind);
+    }
+
+    [Fact]
+    public async Task Previous_Stop_AndClosing_AreNeverSkips()
+    {
+        await _controller.PlayTrackAsync(_ids["B"], ByTitle);
+        _engine.Seek(TimeSpan.FromSeconds(1));
+        await _controller.PreviousAsync();
+        Assert.Equal("A", _controller.CurrentTrack?.Title);
+
+        await _controller.StopAsync();
+
+        // Stopping already logged A's listen, so moving on from the stopped song logs nothing.
+        await _controller.NextAsync();
+        await _controller.CloseAsync();
+
+        Assert.Equal([PlayKind.Partial, PlayKind.Partial, PlayKind.Partial], _listens.Select(l => l.Kind));
+        Assert.Equal([_ids["B"], _ids["A"], _ids["B"]], _listens.Select(l => l.TrackId));
+        Assert.All(await _library.AllRowsAsync(), row => Assert.Equal(0, row.SkipCount));
+    }
+
+    [Fact]
+    public async Task Restarting_StartsAFreshListen()
+    {
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+        _engine.Seek(TimeSpan.FromSeconds(4.5));
+        await _controller.PreviousAsync();
+        _engine.Seek(TimeSpan.FromSeconds(0.5));
+        await _controller.NextAsync();
+
+        Assert.Equal([PlayKind.Complete, PlayKind.Skip], _listens.Select(l => l.Kind));
+    }
+
+    [Fact]
+    public async Task SkippedMissingFiles_AreNotCounted()
+    {
+        File.Delete(Path.Combine(_library.MusicDir, "b.wav"));
+
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+        await _controller.NextAsync();
+
+        Assert.Equal("C", _controller.CurrentTrack?.Title);
+        Assert.Equal([_ids["A"]], _listens.Select(l => l.TrackId));
+        Assert.Null((await TrackAsync("B")).LastPlayedUtc);
+    }
+
+    [Fact]
+    public async Task FifthSkip_ReportsTheFlagChange()
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+            await _controller.NextAsync();
+        }
+
+        Assert.Equal([false, false, false, false, true], _listens.Where(l => l.TrackId == _ids["A"]).Select(l => l.FlagChanged));
+        Assert.True((await TrackAsync("A")).Flagged);
+    }
+
+    [Fact]
+    public async Task Shuffle_PlaysThePickedSongFirst_ThenEverySongOnce()
+    {
+        await _controller.SetShuffleAsync(true);
+        await _controller.PlayTrackAsync(_ids["B"], ByTitle);
+
+        Assert.Equal(_ids["B"], _controller.Queue.Ids[0]);
+        Assert.Equal(0, _controller.Queue.Index);
+        Assert.Equal(_ids.Values.Order(), _controller.Queue.Ids.Order());
+    }
+
+    [Fact]
+    public async Task TurningShuffleOnAndOff_KeepsThePlayingSong()
+    {
+        await _controller.PlayTrackAsync(_ids["B"], ByTitle);
+
+        await _controller.SetShuffleAsync(true);
+        Assert.True(_controller.Shuffle);
+        Assert.Equal((0, _ids["B"]), (_controller.Queue.Index, _controller.Queue.Current));
+        Assert.Equal(3, _controller.Queue.Count);
+
+        await _controller.NextAsync();
+        var playing = _controller.Queue.Current;
+
+        await _controller.SetShuffleAsync(false);
+        Assert.Equal([_ids["A"], _ids["B"], _ids["C"]], _controller.Queue.Ids);
+        Assert.Equal(playing, _controller.Queue.Current);
+    }
+
+    [Fact]
+    public async Task Shuffle_PutsOftenSkippedSongsLast()
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            await _library.Stats.RecordAsync(_ids["A"], 0, 5000, PlayKind.Skip);
+            await _library.Stats.RecordAsync(_ids["C"], 5000, 5000, PlayKind.Complete);
+        }
+
+        _library.Clock.Advance(TimeSpan.FromDays(30));
+        await _controller.SetShuffleAsync(true);
+        var lastA = 0;
+        for (var i = 0; i < 50; i++)
+        {
+            await _controller.PlayTrackAsync(_ids["B"], ByTitle);
+            lastA += _controller.Queue.Ids[^1] == _ids["A"] ? 1 : 0;
+        }
+
+        Assert.InRange(lastA, 40, 50);
+    }
+
+    [Fact]
+    public async Task BpmLens_InShuffle_KeepsTheSongsAlreadyPlayed()
+    {
+        await _library.Tracks.SetManualBpmAsync([_ids["A"]], 90);
+        await _library.Tracks.SetManualBpmAsync([_ids["B"]], 120);
+        await _library.Tracks.SetManualBpmAsync([_ids["C"]], 140);
+        await _controller.SetShuffleAsync(true);
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+        await _controller.NextAsync();
+        var playing = _controller.Queue.Current;
+
+        await _controller.SetBpmLensAsync(new BpmRange(80, 150));
+        Assert.Equal((1, _ids["A"], playing), (_controller.Queue.Index, _controller.Queue.Ids[0], _controller.Queue.Current));
+
+        // A falls outside this range, so it drops out of the history.
+        await _controller.SetBpmLensAsync(new BpmRange(100, 150));
+        Assert.Equal((0, playing), (_controller.Queue.Index, _controller.Queue.Current));
+        Assert.Equal(2, _controller.Queue.Count);
+    }
+
+    [Fact]
+    public async Task HiddenSongs_LeaveTheQueue()
+    {
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+
+        await _controller.RemoveAsync([_ids["B"]], unload: false);
+        await _controller.NextAsync();
+
+        Assert.Equal("C", _controller.CurrentTrack?.Title);
+    }
+
+    [Fact]
+    public async Task Removing_ThePlayingSong_ClosesItsFile()
+    {
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+
+        await _controller.RemoveAsync([_ids["A"]], unload: true);
+
+        Assert.Null(_controller.CurrentTrack);
+        Assert.Null(_engine.CurrentPath);
+        Assert.Equal(PlayerState.Stopped, _engine.State);
+        File.Delete(Path.Combine(_library.MusicDir, "a.wav"));
+        Assert.Equal(PlayKind.Partial, Assert.Single(_listens).Kind);
+
+        // Next carries on from where the removed song was.
+        await _controller.NextAsync();
+        Assert.Equal("B", _controller.CurrentTrack?.Title);
+    }
+
+    private async Task<Track> TrackAsync(string title) => (await _library.Tracks.GetAsync(_ids[title]))!;
 
     private static async Task WaitUntil(Func<bool> condition)
     {

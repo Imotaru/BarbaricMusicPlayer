@@ -16,6 +16,7 @@ import {
   type SavedQuery,
   type SortKey,
   type TagFilter,
+  type TrackScope,
 } from './query'
 import { tags } from './tags.svelte'
 import { ui } from './ui.svelte'
@@ -34,6 +35,8 @@ export interface TrackRow {
   /** Zero-based place in the manual playlist being shown; null elsewhere. */
   position: number | null
   tagIds: number[]
+  playCount: number
+  skipCount: number
 }
 
 export type BpmSource = 'tag' | 'analyzed' | 'manual'
@@ -52,8 +55,27 @@ export interface ScanStatus {
   total: number
 }
 
-/** What the list shows: the whole library, a filter playlist loaded into the controls, or a manual playlist. */
-export type View = { kind: 'library' } | { kind: 'filter'; id: number } | { kind: 'manual'; id: number }
+/**
+ * What the list shows: the whole library, a filter playlist loaded into the controls, a manual
+ * playlist, the songs suggested for removal, or the hidden ones.
+ */
+export type View =
+  | { kind: 'library' }
+  | { kind: 'filter'; id: number }
+  | { kind: 'manual'; id: number }
+  | { kind: 'suggested' }
+  | { kind: 'hidden' }
+
+/** How many songs the suggested and hidden views hold. */
+export interface LibraryCounts {
+  suggested: number
+  hidden: number
+}
+
+interface RecycleResult {
+  recycled: number
+  failed: string[]
+}
 
 interface QueryPage {
   total: number
@@ -92,6 +114,7 @@ class Library {
   error = $state<string | null>(null)
   /** Bumped when the list should scroll back to the top (new search, sort, filter or view). */
   scrollResets = $state(0)
+  counts = $state<LibraryCounts>({ suggested: 0, hidden: 0 })
 
   private pages = $state.raw(new Map<number, TrackRow[]>())
   private version = 0
@@ -112,11 +135,15 @@ class Library {
   constructor() {
     if (!hasHost) return
     on<ScanStatus>('library.scan', (s) => (this.scan = s))
-    on('library.changed', () => this.refresh())
+    on('library.changed', () => {
+      this.refresh()
+      this.refreshCounts()
+    })
     on<{ message: string }>('library.error', (e) => (this.error = e.message))
     call<string[]>('library.getFolders').then((f) => (this.folders = f))
     call<ScanStatus>('library.getScanStatus').then((s) => (this.scan = s))
     this.refresh()
+    this.refreshCounts()
   }
 
   get context(): QueryContext {
@@ -127,7 +154,12 @@ class Library {
       filter: toTrackFilter(this.filter),
       playlistId: this.view.kind === 'manual' ? this.view.id : null,
       bpm: this.lensActive ? { ...this.lens } : null,
+      scope: this.scope,
     }
+  }
+
+  get scope(): TrackScope {
+    return this.view.kind === 'suggested' || this.view.kind === 'hidden' ? this.view.kind : 'library'
   }
 
   get lensActive() {
@@ -141,7 +173,7 @@ class Library {
 
   /** The playlist being shown, if any. */
   get playlist(): Playlist | undefined {
-    return this.view.kind === 'library' ? undefined : playlists.byId.get(this.view.id)
+    return this.view.kind === 'filter' || this.view.kind === 'manual' ? playlists.byId.get(this.view.id) : undefined
   }
 
   /** A filter playlist whose search, filter or sort was changed since it was opened or saved. */
@@ -199,6 +231,11 @@ class Library {
     }
     this.resetList()
   }
+
+  /** Songs skipped so often they may not belong in the library; most skipped first. */
+  openSuggested = () => this.openScope({ kind: 'suggested' }, 'skips', true)
+
+  openHidden = () => this.openScope({ kind: 'hidden' }, 'artist', false)
 
   /** Shows the whole library narrowed to one tag. */
   showTag = (id: number) => {
@@ -495,6 +532,41 @@ class Library {
     }
   }
 
+  // ---- Suggestions, hiding and deleting ------------------------------------------------------------
+
+  /** Takes the selected songs off the suggestions by starting their play and skip counts over. */
+  keepSelected = () =>
+    this.changeSelected('library.keep', (n) => `Kept ${songs(n)}. ${n === 1 ? 'Its' : 'Their'} play and skip counts start over.`)
+
+  hideSelected = () =>
+    this.changeSelected('library.hide', (n) => `Hid ${songs(n)}. Find ${n === 1 ? 'it' : 'them'} under Hidden songs.`)
+
+  unhideSelected = () => this.changeSelected('library.unhide', (n) => `${songs(n)} back in the library.`)
+
+  /** Asks, then moves the selected songs' files to the Recycle Bin. */
+  confirmRecycle = () => {
+    const ids = this.selectedIds()
+    if (ids.length === 0) return
+    const titles = this.titlesOf(ids)
+    ui.openConfirm({
+      title: ids.length === 1 ? 'Delete this song?' : `Delete ${songs(ids.length)}?`,
+      message: `The ${ids.length === 1 ? 'file moves' : 'files move'} to the Recycle Bin, so you can still restore ${ids.length === 1 ? 'it' : 'them'} from there.`,
+      items: titles.length < ids.length ? [...titles, `and ${(ids.length - titles.length).toLocaleString()} more`] : titles,
+      confirmLabel: 'Move to Recycle Bin',
+      danger: true,
+      action: () =>
+        ui.run(async () => {
+          const result = await call<RecycleResult>('library.recycle', { trackIds: ids })
+          this.setCursor(Math.min(this.cursor, Math.max(this.total - result.recycled - 1, 0)))
+          if (result.failed.length > 0) {
+            ui.notify(`Couldn't delete ${result.failed.map((t) => `“${t}”`).join(', ')}.`, true)
+          } else {
+            ui.notify(`Moved ${songs(result.recycled)} to the Recycle Bin.`)
+          }
+        }),
+    })
+  }
+
   // ---- Folders ---------------------------------------------------------------------------------
 
   addFolder = async () => {
@@ -509,6 +581,48 @@ class Library {
   rescan = () => call('library.rescan')
 
   // ---- Internals -------------------------------------------------------------------------------
+
+  private openScope(view: { kind: 'suggested' | 'hidden' }, sort: SortKey, desc: boolean) {
+    if (this.view.kind === view.kind) return
+    if (this.view.kind === 'library') this.librarySort = { sort: this.sort, desc: this.desc }
+    this.view = view
+    this.text = ''
+    this.filter = emptyFilter()
+    this.sort = sort
+    this.desc = desc
+    this.resetList()
+  }
+
+  /** Runs a host action on the selected songs; the ones that leave the list take the cursor with them. */
+  private changeSelected(method: string, message: (count: number) => string) {
+    const ids = this.selectedIds()
+    if (ids.length === 0) return
+    ui.run(async () => {
+      await call(method, { trackIds: ids })
+      this.setCursor(Math.min(this.cursor, Math.max(this.total - ids.length - 1, 0)))
+      ui.notify(message(ids.length))
+    })
+  }
+
+  private async refreshCounts() {
+    try {
+      this.counts = await call<LibraryCounts>('library.getCounts')
+    } catch {
+      // The sidebar keeps the last counts; the next change tries again.
+    }
+  }
+
+  /** Titles of the given songs that are loaded, at most `max` of them. */
+  private titlesOf(ids: number[], max = 6) {
+    const wanted = new Set(ids)
+    const titles: string[] = []
+    for (const rows of this.pages.values()) {
+      for (const row of rows) {
+        if (wanted.has(row.id) && titles.length < max) titles.push(row.title)
+      }
+    }
+    return titles
+  }
 
   private load(query: SavedQuery | null | undefined) {
     this.text = query?.text ?? ''

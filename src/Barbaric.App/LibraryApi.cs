@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Windows;
 using Barbaric.App.Bridge;
 using Barbaric.Core.Library;
+using Barbaric.Core.Playback;
 using Microsoft.Win32;
 
 namespace Barbaric.App;
@@ -11,6 +12,8 @@ public sealed class LibraryApi : IDisposable
 {
     private readonly FolderRepository _folders;
     private readonly TrackRepository _tracks;
+    private readonly PlayStatsRepository _stats;
+    private readonly PlaybackController _controller;
     private readonly LibraryScanner _scanner;
     private readonly WebBridge _bridge;
     private readonly Window _owner;
@@ -19,10 +22,19 @@ public sealed class LibraryApi : IDisposable
     private bool _rescanRequested;
     private ScanStatus _status = new(false, 0, 0, null);
 
-    public LibraryApi(FolderRepository folders, TrackRepository tracks, LibraryScanner scanner, WebBridge bridge, Window owner)
+    public LibraryApi(
+        FolderRepository folders,
+        TrackRepository tracks,
+        PlayStatsRepository stats,
+        PlaybackController controller,
+        LibraryScanner scanner,
+        WebBridge bridge,
+        Window owner)
     {
         _folders = folders;
         _tracks = tracks;
+        _stats = stats;
+        _controller = controller;
         _scanner = scanner;
         _bridge = bridge;
         _owner = owner;
@@ -51,12 +63,31 @@ public sealed class LibraryApi : IDisposable
             var limit = p.TryGetProperty("limit", out var l) ? l.GetInt32() : int.MaxValue;
             return await Task.Run(() => _tracks.QueryIdsAsync(query, offset, limit));
         });
+        bridge.QueryAsync("library.getCounts", async _ => await _stats.GetCountsAsync());
+        bridge.CommandAsync("library.keep", async p =>
+        {
+            await _stats.KeepAsync(p.GetIds());
+            _bridge.Emit("library.changed");
+        });
+        bridge.CommandAsync("library.hide", async p =>
+        {
+            var ids = p.GetIds();
+            await _stats.SetHiddenAsync(ids, true);
+            await _controller.RemoveAsync(ids, unload: false);
+            EmitTracksChanged();
+        });
+        bridge.CommandAsync("library.unhide", async p =>
+        {
+            await _stats.SetHiddenAsync(p.GetIds(), false);
+            EmitTracksChanged();
+        });
+        bridge.QueryAsync("library.recycle", async p => await RecycleAsync(p.GetIds()));
     }
 
     /// <summary>Raised on the UI thread after each scan pass that completed.</summary>
     public event EventHandler? ScanCompleted;
 
-    /// <summary>Reads <c>{ text, sort, desc, filter, playlistId, bpm }</c> as sent by the UI.</summary>
+    /// <summary>Reads <c>{ text, sort, desc, filter, playlistId, bpm, scope }</c> as sent by the UI.</summary>
     public static TrackQuery ParseQuery(JsonElement p)
     {
         if (p.ValueKind != JsonValueKind.Object)
@@ -70,7 +101,10 @@ public sealed class LibraryApi : IDisposable
             : TrackSort.Artist;
         var desc = p.TryGetProperty("desc", out var d) && d.ValueKind == JsonValueKind.True;
         var playlistId = p.TryGetProperty("playlistId", out var pl) && pl.ValueKind == JsonValueKind.Number ? pl.GetInt64() : (long?)null;
-        return new TrackQuery(text, sort, desc, ParseFilter(p), playlistId, ParseBpmRange(p));
+        var scope = p.TryGetProperty("scope", out var sc) && Enum.TryParse<TrackScope>(sc.GetString(), ignoreCase: true, out var parsedScope)
+            ? parsedScope
+            : TrackScope.Library;
+        return new TrackQuery(text, sort, desc, ParseFilter(p), playlistId, ParseBpmRange(p), scope);
     }
 
     /// <summary>Reads a <c>{ min, max, includeUnknown }</c> range; a missing or open one reads as null.</summary>
@@ -132,6 +166,46 @@ public sealed class LibraryApi : IDisposable
         return await _folders.GetAllAsync();
     }
 
+    /// <summary>
+    /// Moves songs' files to the Recycle Bin and marks them missing. A song that is loaded is
+    /// closed first, since Windows can't move a file that is open.
+    /// </summary>
+    private async Task<RecycleResult> RecycleAsync(List<long> ids)
+    {
+        await _controller.RemoveAsync(ids, unload: true);
+
+        var recycled = new List<long>();
+        var failed = new List<string>();
+        foreach (var id in ids)
+        {
+            if (await _tracks.GetAsync(id) is not { } track)
+            {
+                continue;
+            }
+
+            if (NativeMethods.SendToRecycleBin(track.Path, _owner))
+            {
+                recycled.Add(id);
+            }
+            else
+            {
+                failed.Add(track.Title);
+            }
+        }
+
+        await _stats.MarkMissingAsync(recycled);
+        EmitTracksChanged();
+        return new RecycleResult(recycled.Count, failed);
+    }
+
+    /// <summary>Songs left or joined the library, which changes tag and playlist counts too.</summary>
+    private void EmitTracksChanged()
+    {
+        _bridge.Emit("library.changed");
+        _bridge.Emit("tags.changed");
+        _bridge.Emit("playlists.changed");
+    }
+
     private async Task ScanLoopAsync()
     {
         _rescanRequested = true;
@@ -178,6 +252,8 @@ public sealed class LibraryApi : IDisposable
     }
 
     public sealed record ScanStatus(bool Running, int Processed, int Total, ScanResult? LastResult);
+
+    private sealed record RecycleResult(int Recycled, IReadOnlyList<string> Failed);
 
     /// <summary>
     /// Forwards scanner progress at most ~10 times a second, and lets the list refresh every

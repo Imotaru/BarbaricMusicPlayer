@@ -19,10 +19,10 @@ public sealed partial class TagRepository(LibraryDatabase database)
         "#ef6f6c", "#f5a524", "#d6d24a", "#7cd05a", "#3ecfb2", "#4fa3ff", "#9b7bff", "#e86bd8",
     ];
 
-    private const string SelectInfo = """
+    private const string SelectInfo = $"""
         SELECT g.id, g.name, g.color,
                (SELECT count(*) FROM track_tags tt JOIN tracks t ON t.id = tt.track_id
-                WHERE tt.tag_id = g.id AND t.missing = 0) AS count
+                WHERE tt.tag_id = g.id AND {TrackRepository.Visible}) AS count
         FROM tags g
         """;
 

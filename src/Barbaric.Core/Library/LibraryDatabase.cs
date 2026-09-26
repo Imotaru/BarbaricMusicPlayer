@@ -101,6 +101,20 @@ public sealed class LibraryDatabase
 
         CREATE INDEX ix_playlist_tracks_position ON playlist_tracks (playlist_id, position);
         """,
+        """
+        ALTER TABLE tracks ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+
+        CREATE TABLE play_events (
+            id          INTEGER PRIMARY KEY,
+            track_id    INTEGER NOT NULL REFERENCES tracks (id) ON DELETE CASCADE,
+            at_utc      INTEGER NOT NULL,
+            played_ms   INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            kind        TEXT    NOT NULL CHECK (kind IN ('complete', 'skip', 'partial'))
+        );
+
+        CREATE INDEX ix_play_events_track ON play_events (track_id, at_utc);
+        """,
     ];
 
     private readonly string _connectionString;

@@ -16,6 +16,7 @@ export interface PlayerSnapshot {
   volume: number
   hasNext: boolean
   hasPrevious: boolean
+  shuffle: boolean
 }
 
 export const GAIN_MIN_DB = -24
@@ -35,6 +36,7 @@ class Player {
   volume = $state(1)
   hasNext = $state(false)
   hasPrevious = $state(false)
+  shuffle = $state(false)
   error = $state<string | null>(null)
 
   constructor() {
@@ -65,6 +67,12 @@ class Player {
   next = () => this.run(() => call('player.next'))
 
   previous = () => this.run(() => call('player.previous'))
+
+  /** Skip-aware shuffle; the playing song carries on either way. */
+  toggleShuffle = () => {
+    this.shuffle = !this.shuffle
+    this.run(() => call('player.setShuffle', { on: this.shuffle }))
+  }
 
   seek = (seconds: number) => {
     if (!this.loaded) return
@@ -97,6 +105,7 @@ class Player {
     this.volume = s.volume
     this.hasNext = s.hasNext
     this.hasPrevious = s.hasPrevious
+    this.shuffle = s.shuffle
   }
 
   private async run(action: () => Promise<unknown>) {

@@ -175,6 +175,13 @@ public sealed class AudioEngine : IDisposable
         SetState(PlayerState.Stopped);
     }
 
+    /// <summary>Stops and closes the current file so it can be moved or deleted.</summary>
+    public void Unload()
+    {
+        CloseCurrent();
+        SetState(PlayerState.Stopped, force: true);
+    }
+
     public void Seek(TimeSpan position)
     {
         lock (_sync)

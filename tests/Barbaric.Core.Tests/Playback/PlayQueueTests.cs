@@ -44,4 +44,29 @@ public class PlayQueueTests
 
         Assert.Equal(3, queue.Current);
     }
+
+    [Fact]
+    public void Remove_KeepsTheCurrentSong_AndItsPlace()
+    {
+        var queue = new PlayQueue();
+        queue.Set([1, 2, 3, 4, 5], startIndex: 2);
+
+        queue.Remove([1, 3, 5]);
+
+        Assert.Equal<long>([2, 3, 4], queue.Ids);
+        Assert.Equal(3, queue.Current);
+        Assert.Equal(1, queue.Index);
+    }
+
+    [Fact]
+    public void Remove_EverythingAfterTheCurrentSong_EndsTheQueueThere()
+    {
+        var queue = new PlayQueue();
+        queue.Set([7, 8, 9], startIndex: 0);
+
+        queue.Remove([7, 8, 9]);
+
+        Assert.Equal<long>([7], queue.Ids);
+        Assert.False(queue.HasNext);
+    }
 }
