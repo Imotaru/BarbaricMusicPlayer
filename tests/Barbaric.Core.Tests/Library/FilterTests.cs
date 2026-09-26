@@ -89,6 +89,54 @@ public sealed class FilterTests : IAsyncLifetime
         Assert.Equal(expected, await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter)));
     }
 
+    [Theory]
+    [InlineData(100.0, 150.0, false, new[] { "Bravo", "Charlie" })]
+    [InlineData(100.0, 150.0, true, new[] { "Bravo", "Charlie", "Delta", "Echo" })]
+    [InlineData(null, 100.0, true, new[] { "Alpha", "Delta", "Echo" })]
+    [InlineData(null, null, false, new[] { "Alpha", "Bravo", "Charlie", "Delta", "Echo" })]
+    public async Task BpmLens_NarrowsTheList_OptionallyKeepingUnknownBpm(double? min, double? max, bool includeUnknown, string[] expected)
+    {
+        var query = new TrackQuery(Sort: TrackSort.Title, Bpm: new BpmRange(min, max, includeUnknown));
+
+        Assert.Equal(expected, await _library.TitlesAsync(query));
+    }
+
+    [Fact]
+    public async Task FilterRangeWithUnknownBpm_KeepsSongsWithoutATempo()
+    {
+        var filter = new TrackFilter { BpmMin = 130, IncludeUnknownBpm = true };
+
+        Assert.Equal(["Charlie", "Delta", "Echo"], await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter)));
+    }
+
+    [Fact]
+    public async Task BpmLens_IntersectsWithTheSavedRange()
+    {
+        var filter = new TrackFilter { BpmMin = 100, IncludeUnknownBpm = true };
+        var query = new TrackQuery(Sort: TrackSort.Title, Filter: filter, Bpm: new BpmRange(null, 130));
+
+        // Saved range keeps Bravo, Charlie, Delta, Echo; the lens then drops Charlie and the unknowns.
+        Assert.Equal(["Bravo"], await _library.TitlesAsync(query));
+    }
+
+    [Fact]
+    public async Task BpmLens_CombinesWithTagsAndSearch()
+    {
+        var filter = new TrackFilter { AllTags = Ids(["rock"]) };
+        var query = new TrackQuery("band", TrackSort.Title, Filter: filter, Bpm: new BpmRange(100, null));
+
+        Assert.Equal(["Bravo", "Charlie"], await _library.TitlesAsync(query));
+        Assert.Equal(["Charlie"], await _library.TitlesAsync(query with { Text = "two" }));
+    }
+
+    [Fact]
+    public async Task BpmLens_AppliesToTheQueueIds()
+    {
+        var ids = await _library.Tracks.QueryIdsAsync(new TrackQuery(Sort: TrackSort.Title, Bpm: new BpmRange(100, 150)));
+
+        Assert.Equal([_tracks["Bravo"], _tracks["Charlie"]], ids);
+    }
+
     [Fact]
     public async Task Rows_CarryTheirTagIds()
     {

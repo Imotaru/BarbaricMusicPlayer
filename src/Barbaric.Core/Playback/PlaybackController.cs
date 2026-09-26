@@ -16,6 +16,9 @@ public sealed class PlaybackController : IDisposable
     private readonly TrackRepository _tracks;
     private readonly SynchronizationContext? _context;
 
+    /// <summary>The list the queue was built from, so a new BPM lens can re-filter it.</summary>
+    private TrackQuery? _queueSource;
+
     /// <param name="context">
     /// Where end-of-song handling runs. Pass the UI context in the app; <c>null</c> runs it inline.
     /// </param>
@@ -38,6 +41,7 @@ public sealed class PlaybackController : IDisposable
     /// <summary>Plays a track and queues the rest of the list it was picked from.</summary>
     public async Task PlayTrackAsync(long id, TrackQuery? context = null)
     {
+        _queueSource = context;
         List<long> ids = context is null ? [id] : [.. await _tracks.QueryIdsAsync(context)];
         var index = ids.IndexOf(id);
         if (index < 0)
@@ -61,6 +65,7 @@ public sealed class PlaybackController : IDisposable
         }
 
         Queue.Clear();
+        _queueSource = null;
         CurrentTrack = null;
         _engine.Load(path);
         await _engine.PlayAsync();
@@ -86,6 +91,36 @@ public sealed class PlaybackController : IDisposable
         }
 
         await PlayCurrentAsync(forward: false);
+    }
+
+    /// <summary>
+    /// Re-filters the queue by a new BPM range. The playing song stays put even when it falls
+    /// outside the range, so Next and Previous carry on from where it sits in the list.
+    /// </summary>
+    public async Task SetBpmLensAsync(BpmRange? lens)
+    {
+        if (_queueSource is not { } source || Queue.Current is not { } current)
+        {
+            return;
+        }
+
+        source = source with { Bpm = lens };
+        _queueSource = source;
+        var all = await _tracks.QueryIdsAsync(source with { Bpm = null });
+        var kept = lens is null or { IsOpen: true } ? null : (await _tracks.QueryIdsAsync(source)).ToHashSet();
+
+        // The queue may have moved on while the ids were loading.
+        if (Queue.Current != current)
+        {
+            return;
+        }
+
+        var ids = all.Where(id => id == current || kept is null || kept.Contains(id)).ToList();
+        var index = ids.IndexOf(current);
+        if (index >= 0)
+        {
+            Queue.Set(ids, index);
+        }
     }
 
     public async Task SetTrackGainAsync(double gainDb)

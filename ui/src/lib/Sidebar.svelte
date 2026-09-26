@@ -1,5 +1,6 @@
 <script lang="ts">
   import { openPlaylistMenu, openTagMenu, pointOf } from './actions'
+  import { bpm } from './bpm.svelte'
   import InlineName from './InlineName.svelte'
   import { library } from './library.svelte'
   import { playlists, type Playlist } from './playlists.svelte'
@@ -8,6 +9,7 @@
 
   const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
   const progress = $derived(library.scan.total > 0 ? (library.scan.processed / library.scan.total) * 100 : 0)
+  const bpmProgress = $derived(bpm.status.total > 0 ? (bpm.status.done / bpm.status.total) * 100 : 0)
 
   const isActive = (p: Playlist) => library.view.kind !== 'library' && library.view.id === p.id
   const isRenaming = (kind: 'tag' | 'playlist', id: number) => ui.renaming?.kind === kind && ui.renaming.id === id
@@ -160,6 +162,16 @@
       <div class="bar"><div style:width="{progress}%"></div></div>
     {:else if library.folders.length > 0}
       <button class="link" onclick={library.rescan}>Rescan folders</button>
+    {/if}
+
+    {#if bpm.status.running}
+      <p class="line">
+        <span>Analyzing BPM… {bpm.status.done.toLocaleString()} / {bpm.status.total.toLocaleString()}</span>
+        <button class="link" onclick={bpm.cancel} title="Stop analyzing for now">Stop</button>
+      </p>
+      <div class="bar"><div style:width="{bpmProgress}%"></div></div>
+    {:else if bpm.status.pending > 0 && !library.scan.running}
+      <button class="link" onclick={bpm.start}>Analyze BPM ({bpm.status.pending.toLocaleString()} left)</button>
     {/if}
   </div>
 </aside>
@@ -391,8 +403,25 @@
     color: var(--text-dim);
   }
 
+  .status {
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+  }
+
   .status p {
-    margin: 0 0 6px;
+    margin: 0;
+  }
+
+  .status .bar {
+    justify-self: stretch;
+  }
+
+  .status .line {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    justify-self: stretch;
   }
 
   .bar {

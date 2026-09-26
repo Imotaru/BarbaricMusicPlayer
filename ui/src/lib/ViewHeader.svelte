@@ -2,9 +2,8 @@
   import { library, songs } from './library.svelte'
 
   const title = $derived(library.view.kind === 'library' ? 'All songs' : (library.playlist?.name ?? ''))
-  const narrowed = $derived(library.text.trim() !== '' || library.hasFilter)
   const count = $derived(
-    library.view.kind === 'library' && narrowed
+    library.view.kind === 'library' && library.narrowed
       ? `${library.total.toLocaleString()} ${library.total === 1 ? 'match' : 'matches'}`
       : songs(library.total),
   )
@@ -31,7 +30,7 @@
     {#if library.dirty}
       <button class="ghost" onclick={library.revert}>Revert</button>
       <button class="primary" onclick={library.saveChanges}>Save changes</button>
-    {:else if library.view.kind === 'library' && narrowed}
+    {:else if library.view.kind === 'library' && library.narrowed}
       <button class="ghost" onclick={library.saveViewAsPlaylist} title="Keep this search and filter as a playlist that updates itself">
         Save as playlist
       </button>

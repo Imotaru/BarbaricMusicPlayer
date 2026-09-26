@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Windows;
 using System.Windows.Media;
 using Barbaric.App.Bridge;
+using Barbaric.Core.Analysis;
 using Barbaric.Core.Audio;
 using Barbaric.Core.Library;
 using Barbaric.Core.Playback;
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
     private PlaybackController? _controller;
     private PlayerApi? _player;
     private LibraryApi? _library;
+    private BpmApi? _bpm;
 
     public MainWindow()
     {
@@ -46,6 +48,7 @@ public partial class MainWindow : Window
         Loaded += async (_, _) => await InitializeWebViewAsync();
         Closed += (_, _) =>
         {
+            _bpm?.Dispose();
             _library?.Dispose();
             _player?.Dispose();
             _controller?.Dispose();
@@ -110,6 +113,10 @@ public partial class MainWindow : Window
         _library = new LibraryApi(new FolderRepository(database), tracks, new LibraryScanner(database), _bridge, this);
         _ = new TagApi(new TagRepository(database), _bridge);
         _ = new PlaylistApi(new PlaylistRepository(database), _bridge);
+        _bpm = new BpmApi(new BpmBackgroundAnalyzer(tracks), tracks, _bridge);
+
+        // Analysis waits for the startup scan, and each rescan hands it the songs it found.
+        _library.ScanCompleted += (_, _) => _bpm.StartBackground();
 
         core.Navigate(startUri.ToString());
         WebView.Focus();

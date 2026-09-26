@@ -1,14 +1,19 @@
 <script lang="ts">
   import { library } from './library.svelte'
+  import { formatRange } from './query'
   import { tags } from './tags.svelte'
 
   const included = $derived(tags.resolve(library.filter.include))
   const excluded = $derived(tags.resolve(library.filter.exclude))
+  // A filter playlist's own saved range; the lens above the list is separate.
+  const range = $derived(formatRange(library.filter.bpmMin, library.filter.bpmMax))
 </script>
 
-{#if included.length > 0 || excluded.length > 0}
-  <div class="filter-bar" role="group" aria-label="Tag filter">
-    <span class="label">Tags</span>
+{#if included.length > 0 || excluded.length > 0 || range}
+  <div class="filter-bar" role="group" aria-label="Filter">
+    {#if included.length > 0 || excluded.length > 0}
+      <span class="label">Tags</span>
+    {/if}
 
     {#each included as tag (tag.id)}
       <span class="chip" style:--c={tag.color}>
@@ -37,6 +42,17 @@
         </button>
       </span>
     {/each}
+
+    {#if range}
+      <span class="chip bpm" title="This playlist's own BPM range">
+        <span class="toggle">
+          {range} BPM{#if library.filter.includeUnknownBpm}<span class="not">&nbsp;+ unknown</span>{/if}
+        </span>
+        <button class="remove" aria-label="Stop filtering by BPM" onclick={library.dropBpmRange}>
+          <svg viewBox="0 0 10 10"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5" /></svg>
+        </button>
+      </span>
+    {/if}
 
     <button class="clear" onclick={library.clearFilter}>Clear</button>
   </div>
@@ -69,6 +85,17 @@
     color: color-mix(in srgb, var(--c) 75%, white);
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .chip.bpm {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .chip.bpm .toggle {
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
   }
 
   .chip.excluded {

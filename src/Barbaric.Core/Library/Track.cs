@@ -69,6 +69,11 @@ public sealed class TrackRow
 
     public double? Bpm { get; set; }
 
+    /// <summary>Where <see cref="Bpm"/> came from: <c>tag</c>, <c>analyzed</c> or <c>manual</c>.</summary>
+    public string? BpmSource { get; set; }
+
+    public double? BpmConfidence { get; set; }
+
     /// <summary>Zero-based place in the manual playlist being shown; null in other views.</summary>
     public int? Position { get; set; }
 
@@ -97,7 +102,7 @@ public enum TrackSort
     Position,
 }
 
-/// <summary>Narrows the list by tags and (from phase 4) by BPM. Empty lists and nulls mean "no constraint".</summary>
+/// <summary>Narrows the list by tags and BPM. Empty lists and nulls mean "no constraint".</summary>
 public sealed record TrackFilter
 {
     /// <summary>Tracks must have every one of these tags.</summary>
@@ -113,20 +118,35 @@ public sealed record TrackFilter
 
     public double? BpmMax { get; init; }
 
+    /// <summary>With a BPM bound set, also keeps tracks whose BPM is not known.</summary>
+    public bool IncludeUnknownBpm { get; init; }
+
     [JsonIgnore]
     public bool IsEmpty =>
         AllTags.Count == 0 && AnyTags.Count == 0 && NoneTags.Count == 0 && BpmMin is null && BpmMax is null;
 }
 
+/// <summary>A BPM range; a null bound leaves that side open.</summary>
+public sealed record BpmRange(double? Min = null, double? Max = null, bool IncludeUnknown = false)
+{
+    [JsonIgnore]
+    public bool IsOpen => Min is null && Max is null;
+}
+
 /// <summary>
 /// What the library list is showing: search text, sort order, an optional filter, and optionally a
-/// manual playlist to show instead of the whole library.
+/// manual playlist to show instead of the whole library. <see cref="Bpm"/> is the BPM range the user
+/// narrows every view with; unlike <see cref="Filter"/> it is never saved with a playlist.
 /// </summary>
 public sealed record TrackQuery(
     string? Text = null,
     TrackSort Sort = TrackSort.Artist,
     bool Descending = false,
     TrackFilter? Filter = null,
-    long? PlaylistId = null);
+    long? PlaylistId = null,
+    BpmRange? Bpm = null);
+
+/// <summary>A track's tempo and where it came from, as sent to the UI after it changes.</summary>
+public sealed record BpmInfo(long Id, double? Bpm, string? BpmSource, double? BpmConfidence);
 
 public sealed record QueryPage(long Total, IReadOnlyList<TrackRow> Rows);

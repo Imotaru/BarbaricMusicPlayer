@@ -1,8 +1,11 @@
 <script lang="ts">
-  import { openRowMenu, pointOf } from './actions'
+  import { openBpmEditor, openRowMenu, pointOf } from './actions'
+  import { describeBpm, formatBpm, isUnsure } from './bpm.svelte'
+  import BpmRange from './BpmRange.svelte'
   import FilterBar from './FilterBar.svelte'
   import { library, type SortKey } from './library.svelte'
   import { formatTime, player } from './player.svelte'
+  import { formatRange } from './query'
   import { tags } from './tags.svelte'
   import ViewHeader from './ViewHeader.svelte'
 
@@ -30,7 +33,6 @@
   const end = $derived(Math.min(library.total, Math.ceil((scrollTop + height) / ROW_HEIGHT) + OVERSCAN))
   const indexes = $derived(Array.from({ length: Math.max(0, end - start) }, (_, i) => start + i))
 
-  const narrowed = $derived(library.text.trim() !== '' || library.hasFilter)
 
   $effect(() => library.ensureRange(start, end))
 
@@ -63,6 +65,13 @@
     }
   }
 
+  // Double-clicking the BPM cell edits it instead of playing the song.
+  function onBpmDblclick(e: MouseEvent) {
+    if (e.ctrlKey || e.shiftKey) return
+    e.stopPropagation()
+    openBpmEditor(pointOf(e))
+  }
+
   function onRowContextmenu(e: MouseEvent, index: number) {
     e.preventDefault()
     if (library.row(index)) openRowMenu(pointOf(e), index)
@@ -72,19 +81,22 @@
 <section class="tracks" class:numbered={library.view.kind === 'manual'}>
   <ViewHeader />
 
-  <div class="search">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5l3.5 3.5" /></svg>
-    <input
-      id="search"
-      type="search"
-      placeholder={library.view.kind === 'library' ? 'Search songs, artists, albums…' : 'Search this playlist…'}
-      autocomplete="off"
-      spellcheck="false"
-      value={library.text}
-      oninput={(e) => library.setText(e.currentTarget.value)}
-      onkeydown={onSearchKeydown}
-    />
-    <kbd>Ctrl F</kbd>
+  <div class="toolbar">
+    <div class="search">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5l3.5 3.5" /></svg>
+      <input
+        id="search"
+        type="search"
+        placeholder={library.view.kind === 'library' ? 'Search songs, artists, albums…' : 'Search this playlist…'}
+        autocomplete="off"
+        spellcheck="false"
+        value={library.text}
+        oninput={(e) => library.setText(e.currentTarget.value)}
+        onkeydown={onSearchKeydown}
+      />
+      <kbd>Ctrl F</kbd>
+    </div>
+    <BpmRange />
   </div>
 
   <FilterBar />
@@ -126,12 +138,17 @@
           <p class="big">Your library is empty</p>
           <p>Add the folders where your music lives and they'll be scanned automatically.</p>
           <button class="cta" onclick={library.addFolder}>Add music folder</button>
-        {:else if narrowed}
+        {:else if library.narrowed}
           <p class="big">No matches</p>
           {#if library.text.trim()}
-            <p>Nothing {library.hasFilter ? 'with these tags ' : ''}matches “{library.text}”.</p>
+            <p>Nothing {library.hasFilter ? 'with this filter ' : ''}matches “{library.text}”.</p>
+          {:else if library.hasFilter}
+            <p>No songs match this filter{library.lensActive ? ' in this BPM range' : ''}.</p>
           {:else}
-            <p>No songs have this combination of tags.</p>
+            <p>No songs at {formatRange(library.lens.min, library.lens.max)} BPM here.</p>
+          {/if}
+          {#if library.lensActive}
+            <button class="cta" onclick={library.resetLens}>Show every BPM</button>
           {/if}
         {:else if library.view.kind === 'manual'}
           <p class="big">This playlist is empty</p>
@@ -182,7 +199,14 @@
                   <span class="chip" style:--c={tag.color}>{tag.name}</span>
                 {/each}
               </span>
-              <span class="cell numeric dim optional">{row.bpm ? Math.round(row.bpm) : ''}</span>
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <span
+                class="cell numeric dim optional bpm"
+                class:manual={row.bpmSource === 'manual'}
+                class:unsure={isUnsure(row)}
+                title={describeBpm(row)}
+                ondblclick={onBpmDblclick}
+              >{formatBpm(row)}</span>
               <span class="cell numeric dim">{row.durationMs ? formatTime(row.durationMs / 1000) : ''}</span>
             {/if}
           </div>
@@ -205,12 +229,19 @@
     --columns: 36px minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px 64px;
   }
 
-  .search {
+  .toolbar {
     flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 6px 20px 10px;
+  }
+
+  .search {
+    flex: 1 1 260px;
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 6px 20px 10px;
     padding: 0 12px;
     height: 38px;
     border-radius: 10px;
@@ -349,6 +380,22 @@
 
   .dim {
     color: var(--text-dim);
+  }
+
+  .bpm.unsure {
+    opacity: 0.6;
+  }
+
+  /* Set by hand: a small accent dot before the number. */
+  .bpm.manual::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    margin: 0 5px 2px 0;
+    border-radius: 50%;
+    background: var(--accent);
+    vertical-align: middle;
   }
 
   .chips {

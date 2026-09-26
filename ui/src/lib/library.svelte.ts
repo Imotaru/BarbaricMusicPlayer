@@ -3,10 +3,15 @@ import { player } from './player.svelte'
 import { playlists, type Playlist } from './playlists.svelte'
 import {
   emptyFilter,
+  formatRange,
   fromTrackFilter,
   isEmptyFilter,
+  isOpenRange,
+  openRange,
   sameView,
   toTrackFilter,
+  withLens,
+  type BpmRange,
   type QueryContext,
   type SavedQuery,
   type SortKey,
@@ -24,9 +29,21 @@ export interface TrackRow {
   album: string | null
   durationMs: number
   bpm: number | null
+  bpmSource: BpmSource | null
+  bpmConfidence: number | null
   /** Zero-based place in the manual playlist being shown; null elsewhere. */
   position: number | null
   tagIds: number[]
+}
+
+export type BpmSource = 'tag' | 'analyzed' | 'manual'
+
+/** A track's tempo after it changed, as the host reports it. */
+export interface BpmInfo {
+  id: number
+  bpm: number | null
+  bpmSource: BpmSource | null
+  bpmConfidence: number | null
 }
 
 export interface ScanStatus {
@@ -45,6 +62,9 @@ interface QueryPage {
 
 export const PAGE_SIZE = 200
 const SEARCH_DEBOUNCE_MS = 60
+const LENS_THROTTLE_MS = 60
+const LENS_QUEUE_DEBOUNCE_MS = 250
+const BPM_REFRESH_MS = 1000
 
 /**
  * The library list as a lazily loaded, paged view over the host's query results.
@@ -62,6 +82,8 @@ class Library {
   sort = $state<SortKey>('artist')
   desc = $state(false)
   filter = $state<TagFilter>(emptyFilter())
+  /** The BPM range narrowing every view (and the queue). It stays set when the view changes. */
+  lens = $state<BpmRange>(openRange())
   total = $state(0)
   cursor = $state(0)
   /** Explicitly selected track ids, each mapped to the row index it had when selected (for list order). */
@@ -82,6 +104,10 @@ class Library {
   private debounce: ReturnType<typeof setTimeout> | undefined
   /** The library view's sort, restored when coming back from a playlist. */
   private librarySort: { sort: SortKey; desc: boolean } = { sort: 'artist', desc: false }
+  private lensTimer: ReturnType<typeof setTimeout> | undefined
+  private lensPending = false
+  private lensQueueTimer: ReturnType<typeof setTimeout> | undefined
+  private bpmRefreshTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor() {
     if (!hasHost) return
@@ -100,7 +126,17 @@ class Library {
       desc: this.desc,
       filter: toTrackFilter(this.filter),
       playlistId: this.view.kind === 'manual' ? this.view.id : null,
+      bpm: this.lensActive ? { ...this.lens } : null,
     }
+  }
+
+  get lensActive() {
+    return !isOpenRange(this.lens)
+  }
+
+  /** Anything hiding songs from the list: search text, the view's filter, or the BPM lens. */
+  get narrowed() {
+    return this.text.trim() !== '' || this.hasFilter || this.lensActive
   }
 
   /** The playlist being shown, if any. */
@@ -120,7 +156,7 @@ class Library {
 
   /** Rows can be rearranged only when the list shows the whole manual playlist in its own order. */
   get canReorder() {
-    return this.view.kind === 'manual' && this.sort === 'position' && !this.desc && !this.text.trim() && !this.hasFilter
+    return this.view.kind === 'manual' && this.sort === 'position' && !this.desc && !this.narrowed
   }
 
   row(index: number): TrackRow | undefined {
@@ -188,11 +224,16 @@ class Library {
     ui.run(() => playlists.updateFilter(playlist.id, this.context))
   }
 
-  /** Saves the current search, filter and sort as a new filter playlist, then offers to name it. */
+  /**
+   * Saves the current search, filter and sort as a new filter playlist, then offers to name it.
+   * An active BPM lens is saved as the playlist's own range, so it keeps showing what is on screen.
+   */
   saveViewAsPlaylist = () =>
     ui.run(async () => {
-      const id = await playlists.createFilter(this.suggestName(), this.context)
+      const filter = withLens(this.context.filter, this.context.bpm)
+      const id = await playlists.createFilter(this.suggestName(), { ...this.context, filter })
       this.view = { kind: 'filter', id }
+      this.filter = fromTrackFilter(filter)
       ui.renaming = { kind: 'playlist', id }
     })
 
@@ -254,7 +295,66 @@ class Library {
 
   setMatchMode = (mode: 'all' | 'any') => this.setFilter({ ...this.filter, mode })
 
-  clearFilter = () => this.setFilter({ ...emptyFilter(), bpmMin: this.filter.bpmMin, bpmMax: this.filter.bpmMax })
+  clearFilter = () => this.setFilter(emptyFilter())
+
+  /** Removes the view's own BPM range (a filter playlist's saved one); the lens is separate. */
+  dropBpmRange = () =>
+    this.setFilter({ ...this.filter, bpmMin: null, bpmMax: null, includeUnknownBpm: false })
+
+  // ---- BPM lens -----------------------------------------------------------------------------------
+
+  /**
+   * Narrows every view to a BPM range. The list follows within a frame or two while a handle is
+   * dragged; the queue is re-filtered once the range settles.
+   */
+  setLens(range: BpmRange) {
+    this.lens = range
+    this.clearForNewList()
+    this.lensPending = true
+    if (this.lensTimer === undefined) {
+      const flush = () => {
+        if (this.lensPending) {
+          this.lensPending = false
+          this.refresh({ resetScroll: true })
+          this.lensTimer = setTimeout(flush, LENS_THROTTLE_MS)
+        } else {
+          this.lensTimer = undefined
+        }
+      }
+      flush()
+    }
+
+    clearTimeout(this.lensQueueTimer)
+    this.lensQueueTimer = setTimeout(() => player.setBpmLens(this.context.bpm), LENS_QUEUE_DEBOUNCE_MS)
+  }
+
+  resetLens = () => this.setLens(openRange())
+
+  /** Puts changed BPMs into the rows already loaded; re-queries when the change can move rows. */
+  patchRows(updates: BpmInfo[]) {
+    const byId = new Map(updates.map((u) => [u.id, u]))
+    let next: Map<number, TrackRow[]> | undefined
+    for (const [page, rows] of this.pages) {
+      let copy: TrackRow[] | undefined
+      rows.forEach((row, i) => {
+        const u = byId.get(row.id)
+        if (!u) return
+        copy ??= [...rows]
+        copy[i] = { ...row, bpm: u.bpm, bpmSource: u.bpmSource, bpmConfidence: u.bpmConfidence }
+      })
+      if (copy) (next ??= new Map(this.pages)).set(page, copy)
+    }
+    if (next) this.pages = next
+
+    const bpmShapesList =
+      this.sort === 'bpm' || this.lensActive || !isOpenRange({ min: this.filter.bpmMin, max: this.filter.bpmMax })
+    if (bpmShapesList && this.bpmRefreshTimer === undefined) {
+      this.bpmRefreshTimer = setTimeout(() => {
+        this.bpmRefreshTimer = undefined
+        this.refresh()
+      }, BPM_REFRESH_MS)
+    }
+  }
 
   // ---- Selection -------------------------------------------------------------------------------
 
@@ -417,14 +517,16 @@ class Library {
     this.filter = fromTrackFilter(query?.filter)
   }
 
-  /** A name for a saved view, from its tags and search text: "chill + party −live “beat”". */
+  /** A name for a saved view, from its tags, BPM range and search text: "chill + party −live 120–130 BPM “beat”". */
   private suggestName() {
+    const range = withLens(this.context.filter, this.context.bpm)
     const names = (ids: number[]) => tags.resolve(ids).map((t) => t.name)
     const parts = [
       names(this.filter.include).join(this.filter.mode === 'all' ? ' + ' : ' / '),
       names(this.filter.exclude)
         .map((n) => `−${n}`)
         .join(' '),
+      range && !isOpenRange({ min: range.bpmMin, max: range.bpmMax }) ? `${formatRange(range.bpmMin, range.bpmMax)} BPM` : '',
       this.text.trim() ? `“${this.text.trim()}”` : '',
     ].filter(Boolean)
     return parts.join(' ') || 'New playlist'

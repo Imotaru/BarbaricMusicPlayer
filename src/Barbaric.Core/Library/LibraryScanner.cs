@@ -27,17 +27,20 @@ public sealed class LibraryScanner(LibraryDatabase database, TimeProvider? clock
                 @Genre, @Year, @TrackNumber, @DurationMs, @Bpm, CASE WHEN @Bpm IS NULL THEN NULL ELSE 'tag' END, @AddedUtc)
         """;
 
-    // A BPM that was measured or set by hand (phase 4) wins over whatever the file's tag says.
-    private const string UpdateSql = """
+    // A BPM that was measured or set by hand wins over whatever the file's tag says. An analysis that
+    // found no beat (analyzed, bpm NULL) gives way to a tag that turns up later.
+    private const string TagWins =
+        "(bpm_source IS NULL OR bpm_source = 'tag' OR (bpm_source = 'analyzed' AND bpm IS NULL AND @Bpm IS NOT NULL))";
+
+    private const string UpdateSql = $"""
         UPDATE tracks SET
             path = @Path, file_name = @FileName, fingerprint = @Fingerprint, file_size = @FileSize,
             modified_utc = @ModifiedUtc, title = @Title, artist = @Artist, album = @Album,
             album_artist = @AlbumArtist, genre = @Genre, year = @Year, track_number = @TrackNumber,
             duration_ms = @DurationMs, missing = 0,
-            bpm = CASE WHEN bpm_source IS NULL OR bpm_source = 'tag' THEN @Bpm ELSE bpm END,
-            bpm_source = CASE WHEN bpm_source IS NULL OR bpm_source = 'tag'
-                              THEN CASE WHEN @Bpm IS NULL THEN NULL ELSE 'tag' END
-                              ELSE bpm_source END
+            bpm_confidence = CASE WHEN {TagWins} THEN NULL ELSE bpm_confidence END,
+            bpm_source = CASE WHEN {TagWins} THEN CASE WHEN @Bpm IS NULL THEN NULL ELSE 'tag' END ELSE bpm_source END,
+            bpm = CASE WHEN {TagWins} THEN @Bpm ELSE bpm END
         WHERE id = @Id
         """;
 

@@ -34,6 +34,11 @@ public sealed class PlayerApi : IDisposable
         bridge.CommandAsync("player.playTrack", p => _controller.PlayTrackAsync(
             p.GetProperty("id").GetInt64(),
             p.TryGetProperty("context", out var context) ? LibraryApi.ParseQuery(context) : null));
+        bridge.CommandAsync("player.setBpmLens", async p =>
+        {
+            await _controller.SetBpmLensAsync(LibraryApi.ParseBpmRange(p));
+            EmitState();
+        });
         bridge.CommandAsync("player.play", _ => _engine.PlayAsync());
         bridge.Command("player.pause", _ => _engine.Pause());
         bridge.CommandAsync("player.toggle", _ => _engine.TogglePlayPauseAsync());

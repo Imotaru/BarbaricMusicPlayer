@@ -20,8 +20,8 @@ A lightweight Windows music player for local files. Planned features:
 ## Layout
 
 ```
-src/Barbaric.Core/          audio engine, library (database, scanner, search), playback queue; no UI dependencies
-src/Barbaric.App/           WPF host: window, WebView2, bridge, player and library APIs
+src/Barbaric.Core/          audio engine, library (database, scanner, search), BPM analysis, playback queue; no UI dependencies
+src/Barbaric.App/           WPF host: window, WebView2, bridge, player, library, tag, playlist and BPM APIs
 tests/Barbaric.Core.Tests/  xUnit tests for Core
 ui/                         web UI
 ```
@@ -53,6 +53,20 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
 - **Search:** each word matches the start of a word in the title, artist, album, genre or file name. Accents are ignored, so `bjork` finds Björk.
 - **Playing:** a song plays from the current list (search, filter, sort or playlist) and continues down it.
 
+## BPM
+
+- **Detection:** songs without a BPM are analyzed in the background, at low priority, after each scan. The sidebar shows progress, with Stop to pause it and "Analyze BPM (N left)" to resume.
+  - The analyzer decodes a minute from the middle of the song at about 11 kHz. It builds an onset envelope from spectral flux (per frequency band, weighted towards the lows) and autocorrelates it over 60–200 BPM.
+  - Half- and double-tempo candidates are checked before settling on a value.
+  - A song with no clear beat shows "–" and isn't retried.
+- **Sources:** a BPM from the file's tag is kept until you ask for an analysis ("Analyze BPM" in the right-click menu), and then the measured value wins. A BPM set by hand is never overwritten, by analysis or by a rescan.
+- **The BPM column:** hover it to see where a value came from. Uncertain measurements show a "?", and values set by hand have a dot.
+- **Editing:** press B (or double-click a BPM cell) to open the editor for the selection. Type a value, use ÷2 / ×2 to fix an octave error, or tap along with the beat (click the pad or press T). "Reset to automatic" goes back to the file's tag, or measures the song again. Double BPM and Halve BPM are also in the right-click menu.
+- **BPM range:** the slider next to the search box narrows every view (the library and any playlist) and the play queue to a tempo range.
+  - A handle at either end means no limit on that side.
+  - "+?" also keeps songs whose BPM isn't known.
+  - The range stays set as you switch views. Changing it re-filters the queue, and the song that is playing carries on.
+
 ## Tags and playlists
 
 - **Selecting:** Ctrl+click toggles a song, Shift+click selects a range, and Ctrl+A selects the whole list. Right-click for a menu.
@@ -63,7 +77,7 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
   - Alt+click to exclude it.
 
   The chips above the list switch between include and exclude, and between matching all or any of the included tags.
-- **Filter playlists:** "Save as playlist" keeps the current search, tag filter and sort as a playlist that updates itself. Opening one loads it back into the controls. If you change it, the header offers Save changes or Revert.
+- **Filter playlists:** "Save as playlist" keeps the current search, tag filter, BPM range and sort as a playlist that updates itself. The BPM range becomes the playlist's own, shown as a chip, and still combines with whatever range the slider is set to later. Opening one loads it back into the controls. If you change it, the header offers Save changes or Revert.
 - **Manual playlists:** press P to add the selection to a playlist or start a new one. A song appears at most once in a playlist. Sort by # to keep the playlist's own order: Alt+↑/↓ moves the selection, and Del removes it.
 - **Renaming:** double-click a playlist or tag in the sidebar, or right-click it to rename, recolour or delete it.
 
@@ -93,8 +107,9 @@ Release builds run `npm run build` automatically and copy `ui/dist` into `wwwroo
 | Enter | Play the selected song |
 | T | Tag the selected songs |
 | P | Add the selected songs to a playlist |
+| B | Edit the BPM of the selected songs (in the editor: T taps the tempo, Enter saves) |
 | Alt+↑ / Alt+↓ | Move the selected songs within a manual playlist |
 | Del | Remove the selected songs from the manual playlist |
-| Esc | Clear the selection, then the tag filter |
+| Esc | Clear the selection, then the filter (the BPM range slider stays; reset it with its ×) |
 | Ctrl+F or / | Search (↑/↓ and Enter work from the search box; Esc clears it) |
 | Ctrl+O | Open a file |

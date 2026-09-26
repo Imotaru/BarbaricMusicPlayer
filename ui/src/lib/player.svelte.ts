@@ -1,5 +1,5 @@
 import { call, hasHost, on } from './bridge'
-import type { QueryContext } from './query'
+import type { BpmRange, QueryContext } from './query'
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused'
 
@@ -56,6 +56,9 @@ class Player {
     })
 
   playTrack = (id: number, context: QueryContext) => this.run(() => call('player.playTrack', { id, context }))
+
+  /** Re-filters the queue by the BPM lens; the playing song carries on. */
+  setBpmLens = (bpm: BpmRange | null) => this.run(() => call('player.setBpmLens', { bpm }))
 
   toggle = () => this.loaded && this.run(() => call('player.toggle'))
 

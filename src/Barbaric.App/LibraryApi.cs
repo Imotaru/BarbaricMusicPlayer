@@ -53,7 +53,10 @@ public sealed class LibraryApi : IDisposable
         });
     }
 
-    /// <summary>Reads <c>{ text, sort, desc, filter, playlistId }</c> as sent by the UI.</summary>
+    /// <summary>Raised on the UI thread after each scan pass that completed.</summary>
+    public event EventHandler? ScanCompleted;
+
+    /// <summary>Reads <c>{ text, sort, desc, filter, playlistId, bpm }</c> as sent by the UI.</summary>
     public static TrackQuery ParseQuery(JsonElement p)
     {
         if (p.ValueKind != JsonValueKind.Object)
@@ -67,8 +70,26 @@ public sealed class LibraryApi : IDisposable
             : TrackSort.Artist;
         var desc = p.TryGetProperty("desc", out var d) && d.ValueKind == JsonValueKind.True;
         var playlistId = p.TryGetProperty("playlistId", out var pl) && pl.ValueKind == JsonValueKind.Number ? pl.GetInt64() : (long?)null;
-        return new TrackQuery(text, sort, desc, ParseFilter(p), playlistId);
+        return new TrackQuery(text, sort, desc, ParseFilter(p), playlistId, ParseBpmRange(p));
     }
+
+    /// <summary>Reads a <c>{ min, max, includeUnknown }</c> range; a missing or open one reads as null.</summary>
+    public static BpmRange? ParseBpmRange(JsonElement p, string name = "bpm")
+    {
+        if (p.ValueKind != JsonValueKind.Object || !p.TryGetProperty(name, out var r) || r.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var range = new BpmRange(
+            Number(r, "min"),
+            Number(r, "max"),
+            r.TryGetProperty("includeUnknown", out var u) && u.ValueKind == JsonValueKind.True);
+        return range.IsOpen ? null : range;
+    }
+
+    private static double? Number(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var n) && n.ValueKind == JsonValueKind.Number ? n.GetDouble() : null;
 
     private static TrackFilter? ParseFilter(JsonElement p)
     {
@@ -77,9 +98,6 @@ public sealed class LibraryApi : IDisposable
             return null;
         }
 
-        static double? Number(JsonElement f, string name) =>
-            f.TryGetProperty(name, out var n) && n.ValueKind == JsonValueKind.Number ? n.GetDouble() : null;
-
         var filter = new TrackFilter
         {
             AllTags = f.GetIds("allTags"),
@@ -87,6 +105,7 @@ public sealed class LibraryApi : IDisposable
             NoneTags = f.GetIds("noneTags"),
             BpmMin = Number(f, "bpmMin"),
             BpmMax = Number(f, "bpmMax"),
+            IncludeUnknownBpm = f.TryGetProperty("includeUnknownBpm", out var u) && u.ValueKind == JsonValueKind.True,
         };
         return filter.IsEmpty ? null : filter;
     }
@@ -131,6 +150,7 @@ public sealed class LibraryApi : IDisposable
                 {
                     var result = await _scanner.ScanAsync(new ScanReporter(this), _shutdown.Token);
                     SetStatus(_status with { Running = false, LastResult = result });
+                    ScanCompleted?.Invoke(this, EventArgs.Empty);
                 }
                 catch (OperationCanceledException)
                 {

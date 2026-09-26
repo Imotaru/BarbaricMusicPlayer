@@ -1,4 +1,4 @@
-/** App-wide overlay state: toast messages, the context menu, the picker popover and inline renames. */
+/** App-wide overlay state: toast messages, the context menu, the popovers and inline renames. */
 
 export type MenuItem =
   | { label: string; shortcut?: string; danger?: boolean; disabled?: boolean; action: () => void }
@@ -17,13 +17,15 @@ class Ui {
   menu = $state<(Point & { items: MenuItem[] }) | null>(null)
   /** The Tag… / Add to playlist… popover, acting on a snapshot of the selected track ids. */
   picker = $state<(Point & { mode: 'tag' | 'playlist'; trackIds: number[] }) | null>(null)
+  /** The BPM editor popover, acting on a snapshot of the selected track ids. */
+  bpmEditor = $state<(Point & { trackIds: number[] }) | null>(null)
   /** The sidebar item showing an inline name editor. */
   renaming = $state<{ kind: 'tag' | 'playlist'; id: number } | null>(null)
 
   private toastTimer: ReturnType<typeof setTimeout> | undefined
 
   get overlayOpen() {
-    return this.menu !== null || this.picker !== null
+    return this.menu !== null || this.picker !== null || this.bpmEditor !== null
   }
 
   notify = (message: string, error = false) => {
@@ -45,6 +47,7 @@ class Ui {
 
   openMenu(at: Point, items: MenuItem[]) {
     this.picker = null
+    this.bpmEditor = null
     this.menu = { ...at, items }
   }
 
@@ -53,10 +56,20 @@ class Ui {
   openPicker(mode: 'tag' | 'playlist', trackIds: number[], at: Point) {
     if (trackIds.length === 0) return
     this.menu = null
+    this.bpmEditor = null
     this.picker = { mode, trackIds, ...at }
   }
 
   closePicker = () => (this.picker = null)
+
+  openBpmEditor(trackIds: number[], at: Point) {
+    if (trackIds.length === 0) return
+    this.menu = null
+    this.picker = null
+    this.bpmEditor = { trackIds, ...at }
+  }
+
+  closeBpmEditor = () => (this.bpmEditor = null)
 }
 
 export const ui = new Ui()

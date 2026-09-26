@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { openPlaylistPicker, openTagPicker } from './lib/actions'
+  import { openBpmEditor, openPlaylistPicker, openTagPicker } from './lib/actions'
+  import BpmEditor from './lib/BpmEditor.svelte'
   import { call, hasHost } from './lib/bridge'
   import ContextMenu from './lib/ContextMenu.svelte'
   import { library } from './lib/library.svelte'
@@ -90,6 +91,9 @@
     } else if (e.key === 't' || e.key === 'T') {
       e.preventDefault()
       openTagPicker()
+    } else if (e.key === 'b' || e.key === 'B') {
+      e.preventDefault()
+      openBpmEditor()
     } else if (e.key === 'p' || e.key === 'P') {
       e.preventDefault()
       openPlaylistPicker()
@@ -129,6 +133,11 @@
 {#if ui.picker}
   {#key ui.picker}
     <Picker mode={ui.picker.mode} trackIds={ui.picker.trackIds} at={ui.picker} />
+  {/key}
+{/if}
+{#if ui.bpmEditor}
+  {#key ui.bpmEditor}
+    <BpmEditor trackIds={ui.bpmEditor.trackIds} at={ui.bpmEditor} />
   {/key}
 {/if}
 <Toast />

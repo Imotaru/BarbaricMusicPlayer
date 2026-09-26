@@ -1,5 +1,4 @@
 using NAudio.CoreAudioApi;
-using NAudio.Vorbis;
 using NAudio.Wave;
 
 namespace Barbaric.Core.Audio;
@@ -89,7 +88,7 @@ public sealed class AudioEngine : IDisposable
 
     public void Load(string path, double trackGainDb = 0)
     {
-        var reader = OpenReader(path);
+        var reader = AudioDecoder.Open(path);
         CloseCurrent();
 
         _reader = reader;
@@ -193,18 +192,6 @@ public sealed class AudioEngine : IDisposable
     }
 
     public void Dispose() => CloseCurrent();
-
-    private static WaveStream OpenReader(string path)
-    {
-        if (!File.Exists(path))
-        {
-            throw new FileNotFoundException("Audio file not found.", path);
-        }
-
-        return Path.GetExtension(path).Equals(".ogg", StringComparison.OrdinalIgnoreCase)
-            ? new VorbisWaveReader(path)
-            : new MediaFoundationReader(path);
-    }
 
     private async Task<IWavePlayer> CreateOutputAsync(ISampleProvider chain)
     {

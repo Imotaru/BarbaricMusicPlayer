@@ -152,6 +152,40 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
         Assert.Equal(0, _controller.Queue.Count);
     }
 
+    [Fact]
+    public async Task BpmLens_RefiltersTheQueue_AroundThePlayingSong()
+    {
+        await _library.Tracks.SetManualBpmAsync([_ids["A"]], 90);
+        await _library.Tracks.SetManualBpmAsync([_ids["B"]], 120);
+        await _library.Tracks.SetManualBpmAsync([_ids["C"]], 140);
+        await _controller.PlayTrackAsync(_ids["B"], ByTitle);
+
+        await _controller.SetBpmLensAsync(new BpmRange(100, 130));
+        Assert.Equal((false, false), (_controller.Queue.HasPrevious, _controller.Queue.HasNext));
+
+        await _controller.SetBpmLensAsync(new BpmRange(80, 130));
+        Assert.Equal((true, false), (_controller.Queue.HasPrevious, _controller.Queue.HasNext));
+
+        // The playing song stays in the queue even when the range leaves it out.
+        await _controller.SetBpmLensAsync(new BpmRange(130, 150));
+        Assert.Equal(_ids["B"], _controller.Queue.Current);
+        Assert.True(await _controller.NextAsync());
+        Assert.Equal("C", _controller.CurrentTrack?.Title);
+
+        await _controller.SetBpmLensAsync(null);
+        Assert.Equal((3, _ids["C"]), (_controller.Queue.Count, _controller.Queue.Current));
+    }
+
+    [Fact]
+    public async Task BpmLens_LeavesASingleSongQueueAlone()
+    {
+        await _controller.PlayTrackAsync(_ids["A"]);
+
+        await _controller.SetBpmLensAsync(new BpmRange(200, 210));
+
+        Assert.Equal((1, _ids["A"]), (_controller.Queue.Count, _controller.Queue.Current));
+    }
+
     private static async Task WaitUntil(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);

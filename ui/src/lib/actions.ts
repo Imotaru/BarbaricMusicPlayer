@@ -1,5 +1,6 @@
 // Menus and pickers shared by the list, the sidebar and the keyboard shortcuts in App.svelte.
 
+import { bpm } from './bpm.svelte'
 import { library, songs } from './library.svelte'
 import { playlists, type Playlist } from './playlists.svelte'
 import { tags, type Tag } from './tags.svelte'
@@ -22,6 +23,8 @@ export const openTagPicker = (at: Point = cursorAnchor()) => ui.openPicker('tag'
 
 export const openPlaylistPicker = (at: Point = cursorAnchor()) => ui.openPicker('playlist', library.selectedIds(), at)
 
+export const openBpmEditor = (at: Point = cursorAnchor()) => ui.openBpmEditor(library.selectedIds(), at)
+
 export function openRowMenu(at: Point, index: number) {
   library.contextSelect(index)
   const count = library.selectedCount
@@ -30,6 +33,11 @@ export function openRowMenu(at: Point, index: number) {
     { separator: true },
     { label: count > 1 ? `Tag ${songs(count)}…` : 'Tag…', shortcut: 'T', action: () => openTagPicker(at) },
     { label: 'Add to playlist…', shortcut: 'P', action: () => openPlaylistPicker(at) },
+    { separator: true },
+    { label: 'Edit BPM…', shortcut: 'B', action: () => openBpmEditor(at) },
+    { label: 'Double BPM', action: () => bpm.scaleSelected(2) },
+    { label: 'Halve BPM', action: () => bpm.scaleSelected(0.5) },
+    { label: count > 1 ? `Analyze BPM of ${songs(count)}` : 'Analyze BPM', action: bpm.analyzeSelected },
   ]
   if (library.view.kind === 'manual') {
     items.push(

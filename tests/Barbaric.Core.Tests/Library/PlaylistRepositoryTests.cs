@@ -192,4 +192,21 @@ public sealed class PlaylistRepositoryTests : IAsyncLifetime
 
     private Task<IReadOnlyList<string>> TitlesInAsync(long playlistId, bool descending = false) =>
         _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Position, Descending: descending, PlaylistId: playlistId));
+
+    [Fact]
+    public void SavedView_DropsTheBpmLens_ButKeepsItsOwnRange()
+    {
+        var view = new TrackQuery(
+            Filter: new TrackFilter { BpmMin = 120, BpmMax = 130, IncludeUnknownBpm = true },
+            Bpm: new BpmRange(90, 100));
+
+        var saved = PlaylistRepository.DeserializeQuery(PlaylistRepository.SerializeQuery(view));
+
+        Assert.NotNull(saved);
+        Assert.Null(saved.Bpm);
+        Assert.NotNull(saved.Filter);
+        Assert.Equal(120, saved.Filter.BpmMin);
+        Assert.Equal(130, saved.Filter.BpmMax);
+        Assert.True(saved.Filter.IncludeUnknownBpm);
+    }
 }
