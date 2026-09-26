@@ -10,6 +10,18 @@
   const progress = $derived(player.duration > 0 ? (shownPosition / player.duration) * 100 : 0)
 
   const playOrToggle = () => (player.loaded ? player.toggle() : library.playSelected())
+
+  // What unmuting goes back to.
+  let unmutedVolume = 1
+  const toggleMute = () => {
+    if (player.volume > 0) {
+      unmutedVolume = player.volume
+      player.setVolume(0)
+    } else {
+      player.setVolume(unmutedVolume || 1)
+    }
+  }
+  const volumeTitle = $derived(`Master volume ${Math.round(player.volume * 100)}% — scroll to adjust`)
 </script>
 
 <!-- The whole mini-player drags the window; its controls opt out. -->
@@ -22,6 +34,31 @@
       {:else}
         <p class="title dim">Nothing playing</p>
       {/if}
+    </div>
+    <div class="volume" title={volumeTitle} onwheel={(e) => player.changeVolume(e.deltaY < 0 ? 0.05 : -0.05)}>
+      <button aria-label={player.volume > 0 ? 'Mute' : 'Unmute'} onclick={toggleMute}>
+        <svg viewBox="0 0 24 24">
+          <path class="body" d="M4 9h4l5-4v14l-5-4H4z" />
+          {#if player.volume === 0}
+            <path d="M16 9.5l5 5M21 9.5l-5 5" />
+          {:else}
+            <path d="M16 9.5a3.5 3.5 0 0 1 0 5" />
+            {#if player.volume > 0.5}
+              <path d="M18.5 7a7 7 0 0 1 0 10" />
+            {/if}
+          {/if}
+        </svg>
+      </button>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        value={player.volume}
+        oninput={(e) => player.setVolume(e.currentTarget.valueAsNumber)}
+        style:--progress="{player.volume * 100}%"
+        aria-label="Master volume"
+      />
     </div>
     <div class="window">
       <button aria-label={keymap.titled('Back to the full player', 'window.compact')} title={keymap.titled('Full player', 'window.compact')} onclick={() => ui.setCompact(false)}>
@@ -118,6 +155,47 @@
 
   .title.dim {
     font-weight: 400;
+  }
+
+  .volume {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 24px;
+    -webkit-app-region: no-drag;
+  }
+
+  .volume button {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-dim);
+  }
+
+  .volume button:hover {
+    color: var(--text);
+  }
+
+  .volume svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  .volume svg .body {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .volume input {
+    width: 64px;
   }
 
   .window {
