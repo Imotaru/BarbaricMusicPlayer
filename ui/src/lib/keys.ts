@@ -16,6 +16,7 @@ export const DEFAULT_KEYS: Record<string, string[]> = {
   'player.shuffle': ['KeyS'],
   'player.openFile': ['Ctrl+KeyO'],
   'library.search': ['Ctrl+KeyF', '/'],
+  'selection.edit': ['KeyE'],
   'selection.tag': ['KeyT'],
   'selection.bpm': ['KeyB'],
   'selection.playlist': ['KeyP'],

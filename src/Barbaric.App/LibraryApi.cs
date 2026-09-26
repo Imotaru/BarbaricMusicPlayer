@@ -76,6 +76,19 @@ public sealed class LibraryApi : IDisposable
             await _stats.SetSkipsAsync(p.GetIds(), p.GetProperty("skips").GetInt64());
             _bridge.Emit("library.changed");
         });
+        bridge.QueryAsync("library.getInfo", async p => await _tracks.GetInfoAsync(p.GetIds()));
+        bridge.CommandAsync("library.setInfo", async p =>
+        {
+            var ids = p.GetIds();
+            await _tracks.SetInfoAsync(ids, ParseInfo(p));
+            if (p.TryGetProperty("reset", out var reset) && reset.ValueKind == JsonValueKind.Array)
+            {
+                await _tracks.ResetInfoAsync(ids, [.. reset.EnumerateArray().Select(f => ParseField(f.GetString()))]);
+            }
+
+            await _controller.RefreshCurrentTrackAsync(ids);
+            _bridge.Emit("library.changed");
+        });
         bridge.CommandAsync("library.hide", async p =>
         {
             var ids = p.GetIds();
@@ -128,6 +141,34 @@ public sealed class LibraryApi : IDisposable
             r.TryGetProperty("includeUnknown", out var u) && u.ValueKind == JsonValueKind.True);
         return range.IsOpen ? null : range;
     }
+
+    /// <summary>Reads <c>set: { title, artist, …, trackNumber }</c>: text or null, and numbers or null for year and track.</summary>
+    private static Dictionary<TrackField, object?> ParseInfo(JsonElement p)
+    {
+        var values = new Dictionary<TrackField, object?>();
+        if (!p.TryGetProperty("set", out var set) || set.ValueKind != JsonValueKind.Object)
+        {
+            return values;
+        }
+
+        foreach (var property in set.EnumerateObject())
+        {
+            values[ParseField(property.Name)] = property.Value.ValueKind switch
+            {
+                JsonValueKind.Null => null,
+                JsonValueKind.String => property.Value.GetString(),
+                JsonValueKind.Number when property.Value.TryGetInt64(out var n) => n,
+                _ => throw new ArgumentException($"'{property.Name}' has an unusable value."),
+            };
+        }
+
+        return values;
+    }
+
+    private static TrackField ParseField(string? name) =>
+        Enum.TryParse<TrackField>(name, ignoreCase: true, out var field) && Enum.IsDefined(field)
+            ? field
+            : throw new ArgumentException($"Unknown song field '{name}'.");
 
     private static double? Number(JsonElement e, string name) =>
         e.TryGetProperty(name, out var n) && n.ValueKind == JsonValueKind.Number ? n.GetDouble() : null;

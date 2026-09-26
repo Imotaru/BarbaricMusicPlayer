@@ -57,6 +57,7 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
 - **Moved or renamed files:** recognised by a content fingerprint, so a song keeps its saved volume and stats.
 - **Deleted files:** hidden rather than deleted, so their data comes back if the file returns.
 - **Search:** each word matches the start of a word in the title, artist, album, genre or file name. Accents are ignored, so `bjork` finds Björk.
+- **Editing song info:** press E (or right-click → Edit info…) to change the title, artist, album, album artist, genre, year or track number of the selection. With several songs selected, only the fields you change are applied. Edits are stored in the library, never written to the files, and a rescan keeps them even if the file's tags change. ↺ next to a field, or "Use file tags", goes back to what the file says.
 - **Playing:** a song plays from the current list (search, filter, sort or playlist) and continues down it.
 
 ## BPM

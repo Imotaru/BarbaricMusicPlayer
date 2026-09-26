@@ -57,7 +57,10 @@ public sealed class PlaybackController : IDisposable
     /// <summary>Raised after a song was left and its play or skip was saved.</summary>
     public event EventHandler<ListenRecord>? ListenRecorded;
 
-    /// <summary>Raised when playing a song taught us something about it, e.g. a length its tags didn't have.</summary>
+    /// <summary>
+    /// Raised when the loaded song's details changed: playing it taught us something (e.g. a length
+    /// its tags didn't have), or the user edited it.
+    /// </summary>
     public event EventHandler<Track>? TrackUpdated;
 
     public PlayQueue Queue { get; } = new();
@@ -285,6 +288,25 @@ public sealed class PlaybackController : IDisposable
             track.GainDb = _engine.TrackGainDb;
             await _tracks.SetGainAsync(track.Id, track.GainDb);
         }
+    }
+
+    /// <summary>Picks up edited details (title, artist, …) of the loaded song when it is among <paramref name="ids"/>.</summary>
+    public async Task RefreshCurrentTrackAsync(IReadOnlyCollection<long> ids)
+    {
+        if (CurrentTrack is not { } track || !ids.Contains(track.Id) || await _tracks.GetAsync(track.Id) is not { } fresh)
+        {
+            return;
+        }
+
+        // Updated in place: the listen in progress and end-of-song handling hold on to this object.
+        track.Title = fresh.Title;
+        track.Artist = fresh.Artist;
+        track.Album = fresh.Album;
+        track.AlbumArtist = fresh.AlbumArtist;
+        track.Genre = fresh.Genre;
+        track.Year = fresh.Year;
+        track.TrackNumber = fresh.TrackNumber;
+        TrackUpdated?.Invoke(this, track);
     }
 
     public void Dispose()

@@ -56,6 +56,23 @@ export interface SkipInfo {
   skipCount: number
 }
 
+/** A song's editable details, as the host reports them. Null details may be left out. */
+export interface TrackInfo {
+  id: number
+  fileName: string
+  title: string
+  artist?: string | null
+  album?: string | null
+  albumArtist?: string | null
+  genre?: string | null
+  year?: number | null
+  trackNumber?: number | null
+  /** The fields set by hand, which a rescan leaves alone. */
+  overridden: InfoField[]
+}
+
+export type InfoField = 'title' | 'artist' | 'album' | 'albumArtist' | 'genre' | 'year' | 'trackNumber'
+
 export interface ScanStatus {
   running: boolean
   processed: number
@@ -564,6 +581,12 @@ class Library {
       ui.notify(ids.length === 1 ? 'Cleared the skips.' : `Cleared the skips of ${songs(ids.length)}.`)
     })
   }
+
+  getInfo = (trackIds: number[]) => call<TrackInfo[]>('library.getInfo', { trackIds })
+
+  /** Overrides the given fields (null clears one) and puts the file's tags back for the `reset` ones. */
+  setInfo = (trackIds: number[], set: Partial<Record<InfoField, string | number | null>>, reset: InfoField[] = []) =>
+    call('library.setInfo', { trackIds, set, reset })
 
   hideSelected = () =>
     this.changeSelected('library.hide', (n) => `Hid ${songs(n)}. Find ${n === 1 ? 'it' : 'them'} under Hidden songs.`)

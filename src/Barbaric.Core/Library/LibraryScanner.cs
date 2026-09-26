@@ -39,11 +39,17 @@ public sealed class LibraryScanner(LibraryDatabase database, TimeProvider? clock
     private const string TagWins =
         "(bpm_source IS NULL OR bpm_source = 'tag' OR (bpm_source = 'analyzed' AND bpm IS NULL AND @Bpm IS NOT NULL))";
 
-    private const string UpdateSql = $"""
+    // A field the user overrode keeps their value; the rest follow the file's tags.
+    private static readonly string TagColumns = string.Join(", ", TrackFields.All.Select(f =>
+    {
+        var column = TrackFields.Column(f);
+        return $"{column} = CASE WHEN json_type(overrides, '$.{column}') IS NULL THEN @{f} ELSE {column} END";
+    }));
+
+    private static readonly string UpdateSql = $"""
         UPDATE tracks SET
             path = @Path, file_name = @FileName, fingerprint = @Fingerprint, file_size = @FileSize,
-            modified_utc = @ModifiedUtc, title = @Title, artist = @Artist, album = @Album,
-            album_artist = @AlbumArtist, genre = @Genre, year = @Year, track_number = @TrackNumber,
+            modified_utc = @ModifiedUtc, {TagColumns},
             duration_ms = CASE WHEN @DurationMs > 0 THEN @DurationMs ELSE duration_ms END, missing = 0,
             bpm_confidence = CASE WHEN {TagWins} THEN NULL ELSE bpm_confidence END,
             bpm_source = CASE WHEN {TagWins} THEN CASE WHEN @Bpm IS NULL THEN NULL ELSE 'tag' END ELSE bpm_source END,

@@ -5,6 +5,7 @@
   import { canRun, commandById } from './lib/commands'
   import ConfirmDialog from './lib/ConfirmDialog.svelte'
   import ContextMenu from './lib/ContextMenu.svelte'
+  import InfoEditor from './lib/InfoEditor.svelte'
   import { chordOf, hasModifier } from './lib/keys'
   import { keymap } from './lib/keymap.svelte'
   import { library } from './lib/library.svelte'
@@ -177,6 +178,11 @@
 {#if ui.skipsEditor}
   {#key ui.skipsEditor}
     <SkipsEditor trackIds={ui.skipsEditor.trackIds} at={ui.skipsEditor} />
+  {/key}
+{/if}
+{#if ui.infoEditor}
+  {#key ui.infoEditor}
+    <InfoEditor trackIds={ui.infoEditor.trackIds} at={ui.infoEditor} />
   {/key}
 {/if}
 {#if ui.confirm}

@@ -10,6 +10,9 @@ public sealed class TrackRepository(LibraryDatabase database)
 
     public const double MaxManualBpm = 400;
 
+    /// <summary>The largest year or track number a song can be given.</summary>
+    public const int MaxInfoNumber = 9999;
+
     /// <summary>The songs the library shows, for queries that alias <c>tracks</c> as <c>t</c>.</summary>
     internal const string Visible = "t.missing = 0 AND t.hidden = 0";
 
@@ -205,6 +208,165 @@ public sealed class TrackRepository(LibraryDatabase database)
             "SELECT id, bpm, bpm_source AS BpmSource, bpm_confidence AS BpmConfidence FROM tracks WHERE id IN (SELECT value FROM json_each(@ids))",
             new { ids = IdList.ToJson(ids) });
         return rows.AsList();
+    }
+
+    public async Task<IReadOnlyList<TrackInfo>> GetInfoAsync(IEnumerable<long> ids)
+    {
+        using var connection = database.Open();
+        var rows = await connection.QueryAsync<InfoRow>(
+            """
+            SELECT id, file_name, title, artist, album, album_artist, genre, year, track_number, overrides
+            FROM tracks WHERE id IN (SELECT value FROM json_each(@ids))
+            """,
+            new { ids = IdList.ToJson(ids) });
+
+        return rows.Select(r => new TrackInfo(
+            r.Id, r.FileName, r.Title, r.Artist, r.Album, r.AlbumArtist, r.Genre, r.Year, r.TrackNumber, Overridden(r.Overrides)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Overrides fields of songs with the user's values, which then stay through rescans until reset.
+    /// Text is trimmed and blank text clears the field, except for the title, which is required.
+    /// </summary>
+    /// <param name="values">Strings for text fields, whole numbers (or null) for the year and track number.</param>
+    /// <exception cref="ArgumentException">A value is missing where required, of the wrong type or out of range.</exception>
+    public async Task SetInfoAsync(IEnumerable<long> ids, IReadOnlyDictionary<TrackField, object?> values)
+    {
+        var normalized = values.Select(v => (Field: v.Key, Value: Normalize(v.Key, v.Value))).ToList();
+        using var connection = database.Open();
+        using var transaction = connection.BeginTransaction();
+        foreach (var (field, value) in normalized)
+        {
+            var column = TrackFields.Column(field);
+            await connection.ExecuteAsync(
+                $$"""
+                UPDATE tracks SET {{column}} = @value, overrides = json_set(coalesce(overrides, '{}'), '$.{{column}}', @value)
+                WHERE id IN (SELECT value FROM json_each(@ids))
+                """,
+                new { ids = IdList.ToJson(ids), value },
+                transaction);
+        }
+
+        transaction.Commit();
+    }
+
+    /// <summary>
+    /// Drops overrides, putting the file's tags back. A file that can't be read right now keeps what
+    /// it shows until the next scan, which then fills in its tags.
+    /// </summary>
+    public async Task ResetInfoAsync(IEnumerable<long> ids, IReadOnlyCollection<TrackField> fields)
+    {
+        if (fields.Count == 0)
+        {
+            return;
+        }
+
+        var paths = await GetPathsAsync(ids);
+        var keys = string.Join(", ", fields.Select(f => $"'$.{TrackFields.Column(f)}'"));
+        using var connection = database.Open();
+        foreach (var (id, path) in paths)
+        {
+            TrackMetadata? tags = null;
+            try
+            {
+                tags = TrackMetadataReader.Read(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Locked or unreachable: the next scan reads the tags instead (see below).
+            }
+
+            var parameters = new DynamicParameters(new { id });
+            var set = new List<string> { $"overrides = nullif(json_remove(overrides, {keys}), '{{}}')" };
+            if (tags is null)
+            {
+                set.Add("modified_utc = 0");
+            }
+            else
+            {
+                foreach (var field in fields)
+                {
+                    set.Add($"{TrackFields.Column(field)} = @{field}");
+                    parameters.Add(field.ToString(), TrackFields.From(tags, field));
+                }
+            }
+
+            await connection.ExecuteAsync($"UPDATE tracks SET {string.Join(", ", set)} WHERE id = @id", parameters);
+        }
+    }
+
+    private async Task<IReadOnlyList<(long Id, string Path)>> GetPathsAsync(IEnumerable<long> ids)
+    {
+        using var connection = database.Open();
+        var rows = await connection.QueryAsync<(long, string)>(
+            "SELECT id, path FROM tracks WHERE id IN (SELECT value FROM json_each(@ids))",
+            new { ids = IdList.ToJson(ids) });
+        return rows.AsList();
+    }
+
+    private static object? Normalize(TrackField field, object? value)
+    {
+        if (TrackFields.IsNumber(field))
+        {
+            if (value is null)
+            {
+                return null;
+            }
+
+            var number = value switch
+            {
+                int i => i,
+                long l => l,
+                _ => throw new ArgumentException($"The {field} must be a whole number."),
+            };
+            return number is >= 1 and <= MaxInfoNumber
+                ? (int)number
+                : throw new ArgumentException($"The {field} must be between 1 and {MaxInfoNumber}.");
+        }
+
+        if (value is not (null or string))
+        {
+            throw new ArgumentException($"The {field} must be text.");
+        }
+
+        var text = string.IsNullOrWhiteSpace((string?)value) ? null : ((string)value).Trim();
+        return text is null && field == TrackField.Title ? throw new ArgumentException("A song needs a title.") : text;
+    }
+
+    private static IReadOnlyList<TrackField> Overridden(string? overrides)
+    {
+        if (string.IsNullOrEmpty(overrides))
+        {
+            return [];
+        }
+
+        using var json = System.Text.Json.JsonDocument.Parse(overrides);
+        var keys = json.RootElement.EnumerateObject().Select(p => p.Name).ToHashSet();
+        return TrackFields.All.Where(f => keys.Contains(TrackFields.Column(f))).ToList();
+    }
+
+    private sealed class InfoRow
+    {
+        public long Id { get; set; }
+
+        public string FileName { get; set; } = "";
+
+        public string Title { get; set; } = "";
+
+        public string? Artist { get; set; }
+
+        public string? Album { get; set; }
+
+        public string? AlbumArtist { get; set; }
+
+        public string? Genre { get; set; }
+
+        public int? Year { get; set; }
+
+        public int? TrackNumber { get; set; }
+
+        public string? Overrides { get; set; }
     }
 
     /// <summary>Builds the <c>FROM … WHERE …</c> part of the list query. Every user value goes in as a parameter.</summary>

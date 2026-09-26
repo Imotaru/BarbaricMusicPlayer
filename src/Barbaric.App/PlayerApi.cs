@@ -270,8 +270,12 @@ public sealed class PlayerApi : IDisposable
     // Play and skip counts show in the list, and the flag decides what's in the suggestions.
     private void OnListenRecorded(object? sender, ListenRecord e) => _bridge.Emit("library.changed");
 
-    // A length found by the decoder shows in the list.
-    private void OnTrackUpdated(object? sender, Track e) => _bridge.Emit("library.changed");
+    // A length found by the decoder shows in the list; an edited title or artist in the player and the OS too.
+    private void OnTrackUpdated(object? sender, Track e) => _dispatcher.BeginInvoke(() =>
+    {
+        _bridge.Emit("library.changed");
+        EmitState();
+    });
 
     private void EmitState()
     {

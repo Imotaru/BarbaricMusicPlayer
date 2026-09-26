@@ -169,6 +169,64 @@ public sealed record TrackQuery(
     BpmRange? Bpm = null,
     TrackScope Scope = TrackScope.Library);
 
+/// <summary>What the user can override about a song. The file's tags fill these in until they do.</summary>
+public enum TrackField
+{
+    Title,
+    Artist,
+    Album,
+    AlbumArtist,
+    Genre,
+    Year,
+    TrackNumber,
+}
+
+public static class TrackFields
+{
+    public static readonly IReadOnlyList<TrackField> All = Enum.GetValues<TrackField>();
+
+    /// <summary>The <c>tracks</c> column behind a field, which is also its key in <c>overrides</c>.</summary>
+    public static string Column(TrackField field) => field switch
+    {
+        TrackField.Title => "title",
+        TrackField.Artist => "artist",
+        TrackField.Album => "album",
+        TrackField.AlbumArtist => "album_artist",
+        TrackField.Genre => "genre",
+        TrackField.Year => "year",
+        TrackField.TrackNumber => "track_number",
+        _ => throw new ArgumentOutOfRangeException(nameof(field)),
+    };
+
+    public static bool IsNumber(TrackField field) => field is TrackField.Year or TrackField.TrackNumber;
+
+    /// <summary>The field's value in a file's tags.</summary>
+    public static object? From(TrackMetadata tags, TrackField field) => field switch
+    {
+        TrackField.Title => tags.Title,
+        TrackField.Artist => tags.Artist,
+        TrackField.Album => tags.Album,
+        TrackField.AlbumArtist => tags.AlbumArtist,
+        TrackField.Genre => tags.Genre,
+        TrackField.Year => tags.Year,
+        TrackField.TrackNumber => tags.TrackNumber,
+        _ => throw new ArgumentOutOfRangeException(nameof(field)),
+    };
+}
+
+/// <summary>A song's editable details, and which of them the user has overridden.</summary>
+public sealed record TrackInfo(
+    long Id,
+    string FileName,
+    string Title,
+    string? Artist,
+    string? Album,
+    string? AlbumArtist,
+    string? Genre,
+    int? Year,
+    int? TrackNumber,
+    IReadOnlyList<TrackField> Overridden);
+
 /// <summary>A track's tempo and where it came from, as sent to the UI after it changes.</summary>
 public sealed record BpmInfo(long Id, double? Bpm, string? BpmSource, double? BpmConfidence);
 

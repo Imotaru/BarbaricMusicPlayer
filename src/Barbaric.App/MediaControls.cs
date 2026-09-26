@@ -16,7 +16,8 @@ public sealed class MediaControls : IDisposable
     private readonly SystemMediaTransportControls _controls;
     private readonly PlayerApi _player;
     private readonly DispatcherTimer _timelineTimer;
-    private string? _shownPath;
+    // What the overlay shows, so it's redrawn for another song or when this one's details were edited.
+    private (string? Path, string? Title, string? Artist, string? Album) _shown;
     private int _artGeneration;
 
     private MediaControls(SystemMediaTransportControls controls, PlayerApi player)
@@ -93,9 +94,10 @@ public sealed class MediaControls : IDisposable
         _controls.IsPreviousEnabled = now.Path is not null;
         _timelineTimer.IsEnabled = now.Playing;
 
-        if (now.Path != _shownPath)
+        var shown = (now.Path, now.Title, now.Artist, now.Album);
+        if (shown != _shown)
         {
-            _shownPath = now.Path;
+            _shown = shown;
             ShowTrack(now);
         }
 

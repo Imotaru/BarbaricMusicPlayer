@@ -121,6 +121,11 @@ public sealed class LibraryDatabase
             value TEXT NOT NULL
         ) WITHOUT ROWID;
         """,
+        """
+        -- Values the user set by hand, as a JSON object keyed by column name. The columns themselves
+        -- hold what is shown; a key here keeps a rescan from overwriting that column with the file's tag.
+        ALTER TABLE tracks ADD COLUMN overrides TEXT;
+        """,
     ];
 
     private readonly string _connectionString;

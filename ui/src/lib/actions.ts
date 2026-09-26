@@ -28,12 +28,19 @@ export const openBpmEditor = (at: Point = cursorAnchor()) => ui.openBpmEditor(li
 
 export const openSkipsEditor = (at: Point = cursorAnchor()) => ui.openSkipsEditor(library.selectedIds(), at)
 
+export const openInfoEditor = (at: Point = cursorAnchor()) => ui.openInfoEditor(library.selectedIds(), at)
+
 export function openRowMenu(at: Point, index: number) {
   library.contextSelect(index)
   const count = library.selectedCount
   const items: MenuItem[] = [
     { label: 'Play', shortcut: 'Enter', action: () => library.playIndex(index) },
     { separator: true },
+    {
+      label: count > 1 ? `Edit info of ${songs(count)}…` : 'Edit info…',
+      shortcut: keymap.label('selection.edit'),
+      action: () => openInfoEditor(at),
+    },
     { label: count > 1 ? `Tag ${songs(count)}…` : 'Tag…', shortcut: keymap.label('selection.tag'), action: () => openTagPicker(at) },
     { label: 'Add to playlist…', shortcut: keymap.label('selection.playlist'), action: () => openPlaylistPicker(at) },
     { separator: true },
