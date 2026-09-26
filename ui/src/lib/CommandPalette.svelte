@@ -35,6 +35,7 @@
       run: () => library.openPlaylist(p),
     })),
     ...tags.list.map((t) => ({ key: `tag:${t.id}`, label: t.name, group: 'Tag', run: () => library.showTag(t.id) })),
+    ...(tags.list.length > 0 ? [{ key: 'tag:untagged', label: 'Untagged', group: 'Tag', run: library.showUntagged }] : []),
   ]
 
   // Every word typed has to appear somewhere in the name or its group, in any order.

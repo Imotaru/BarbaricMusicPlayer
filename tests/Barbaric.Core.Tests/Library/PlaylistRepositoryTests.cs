@@ -125,6 +125,19 @@ public sealed class PlaylistRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task FilterPlaylist_KeepsTheUntaggedFilter()
+    {
+        var tag = await _library.Tags.CreateAsync("t");
+        await _library.Tags.AddToTracksAsync(tag.Id, Ids("A", "C", "D"));
+
+        var id = await _library.Playlists.CreateFilterAsync("New songs", new TrackQuery(Sort: TrackSort.Title, Filter: new TrackFilter { Untagged = true }));
+
+        var saved = (await _library.Playlists.GetAsync(id))!;
+        Assert.True(saved.Query!.Filter!.Untagged);
+        Assert.Equal(["B", "E"], await _library.TitlesAsync(saved.Query));
+    }
+
+    [Fact]
     public async Task UpdateFilter_ReplacesTheSavedView()
     {
         var id = await _library.Playlists.CreateFilterAsync("View", new TrackQuery("first"));

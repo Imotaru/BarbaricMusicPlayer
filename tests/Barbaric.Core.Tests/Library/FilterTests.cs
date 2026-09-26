@@ -68,6 +68,18 @@ public sealed class FilterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Untagged_KeepsOnlySongsWithoutTags()
+    {
+        var filter = new TrackFilter { Untagged = true };
+
+        Assert.False(filter.IsEmpty);
+        Assert.Equal(["Echo"], await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter)));
+        Assert.Empty(await _library.TitlesAsync(new TrackQuery("one", Filter: filter)));
+        Assert.Equal(["Echo"], await _library.TitlesAsync(new TrackQuery(Filter: filter, Bpm: new BpmRange(100, null, IncludeUnknown: true))));
+        Assert.Empty(await _library.TitlesAsync(new TrackQuery(Filter: filter, Bpm: new BpmRange(100, null))));
+    }
+
+    [Fact]
     public async Task RepeatedTagIds_DoNotBreakTheAllMatch()
     {
         var rock = _tags["rock"];

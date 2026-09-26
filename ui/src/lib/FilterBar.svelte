@@ -9,10 +9,19 @@
   const range = $derived(formatRange(library.filter.bpmMin, library.filter.bpmMax))
 </script>
 
-{#if included.length > 0 || excluded.length > 0 || range}
+{#if included.length > 0 || excluded.length > 0 || library.filter.untagged || range}
   <div class="filter-bar" role="group" aria-label="Filter">
-    {#if included.length > 0 || excluded.length > 0}
+    {#if included.length > 0 || excluded.length > 0 || library.filter.untagged}
       <span class="label">Tags</span>
+    {/if}
+
+    {#if library.filter.untagged}
+      <span class="chip plain" title="Songs without any tags">
+        <span class="toggle">Untagged</span>
+        <button class="remove" aria-label="Stop showing only untagged songs" onclick={library.dropUntagged}>
+          <svg viewBox="0 0 10 10"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5" /></svg>
+        </button>
+      </span>
     {/if}
 
     {#each included as tag (tag.id)}
@@ -44,7 +53,7 @@
     {/each}
 
     {#if range}
-      <span class="chip bpm" title="This playlist's own BPM range">
+      <span class="chip plain" title="This playlist's own BPM range">
         <span class="toggle">
           {range} BPM{#if library.filter.includeUnknownBpm}<span class="not">&nbsp;+ unknown</span>{/if}
         </span>
@@ -87,12 +96,12 @@
     font-weight: 600;
   }
 
-  .chip.bpm {
+  .chip.plain {
     background: var(--surface-hover);
     color: var(--text);
   }
 
-  .chip.bpm .toggle {
+  .chip.plain .toggle {
     display: inline-flex;
     align-items: center;
     height: 100%;

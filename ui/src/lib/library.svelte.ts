@@ -90,10 +90,11 @@ export type View =
   | { kind: 'suggested' }
   | { kind: 'hidden' }
 
-/** How many songs the suggested and hidden views hold. */
+/** How many songs the suggested and hidden views hold, and how many library songs have no tags. */
 export interface LibraryCounts {
   suggested: number
   hidden: number
+  untagged: number
 }
 
 interface RecycleResult {
@@ -138,7 +139,7 @@ class Library {
   error = $state<string | null>(null)
   /** Bumped when the list should scroll back to the top (new search, sort, filter or view). */
   scrollResets = $state(0)
-  counts = $state<LibraryCounts>({ suggested: 0, hidden: 0 })
+  counts = $state<LibraryCounts>({ suggested: 0, hidden: 0, untagged: 0 })
 
   private pages = $state.raw(new Map<number, TrackRow[]>())
   private version = 0
@@ -262,15 +263,10 @@ class Library {
   openHidden = () => this.openScope({ kind: 'hidden' }, 'artist', false)
 
   /** Shows the whole library narrowed to one tag. */
-  showTag = (id: number) => {
-    if (this.view.kind !== 'library') {
-      this.view = { kind: 'library' }
-      ;({ sort: this.sort, desc: this.desc } = this.librarySort)
-    }
-    this.text = ''
-    this.filter = { ...emptyFilter(), include: [id] }
-    this.resetList()
-  }
+  showTag = (id: number) => this.showFiltered({ ...emptyFilter(), include: [id] })
+
+  /** Shows the library songs that carry no tags yet, such as ones that just arrived. */
+  showUntagged = () => this.showFiltered({ ...emptyFilter(), untagged: true })
 
   /** Throws away edits to the open filter playlist. */
   revert = () => {
@@ -322,23 +318,25 @@ class Library {
     this.resetList()
   }
 
-  /** Ctrl+click on a sidebar tag: add it to (or take it out of) the included tags. */
+  /** Ctrl+click on a sidebar tag: add it to (or take it out of) the included tags. Untagged no longer applies. */
   toggleInclude = (id: number) => {
     const f = this.filter
     this.setFilter({
       ...f,
       include: f.include.includes(id) ? f.include.filter((t) => t !== id) : [...f.include, id],
       exclude: f.exclude.filter((t) => t !== id),
+      untagged: false,
     })
   }
 
-  /** Alt+click on a sidebar tag: exclude it (or stop excluding it). */
+  /** Alt+click on a sidebar tag: exclude it (or stop excluding it). Untagged no longer applies. */
   toggleExclude = (id: number) => {
     const f = this.filter
     this.setFilter({
       ...f,
       include: f.include.filter((t) => t !== id),
       exclude: f.exclude.includes(id) ? f.exclude.filter((t) => t !== id) : [...f.exclude, id],
+      untagged: false,
     })
   }
 
@@ -353,6 +351,8 @@ class Library {
     if (!f.include.includes(id) && !f.exclude.includes(id)) return
     this.setFilter({ ...f, include: f.include.filter((t) => t !== id), exclude: f.exclude.filter((t) => t !== id) })
   }
+
+  dropUntagged = () => this.setFilter({ ...this.filter, untagged: false })
 
   setMatchMode = (mode: 'all' | 'any') => this.setFilter({ ...this.filter, mode })
 
@@ -632,6 +632,16 @@ class Library {
 
   // ---- Internals -------------------------------------------------------------------------------
 
+  private showFiltered(filter: TagFilter) {
+    if (this.view.kind !== 'library') {
+      this.view = { kind: 'library' }
+      ;({ sort: this.sort, desc: this.desc } = this.librarySort)
+    }
+    this.text = ''
+    this.filter = filter
+    this.resetList()
+  }
+
   private openScope(view: { kind: 'suggested' | 'hidden' }, sort: SortKey, desc: boolean) {
     if (this.view.kind === view.kind) return
     if (this.view.kind === 'library') this.librarySort = { sort: this.sort, desc: this.desc }
@@ -686,6 +696,7 @@ class Library {
     const range = withLens(this.context.filter, this.context.bpm)
     const names = (ids: number[]) => tags.resolve(ids).map((t) => t.name)
     const parts = [
+      this.filter.untagged ? 'Untagged' : '',
       names(this.filter.include).join(this.filter.mode === 'all' ? ' + ' : ' / '),
       names(this.filter.exclude)
         .map((n) => `−${n}`)

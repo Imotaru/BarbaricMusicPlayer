@@ -185,6 +185,7 @@ public sealed class LibraryApi : IDisposable
             AllTags = f.GetIds("allTags"),
             AnyTags = f.GetIds("anyTags"),
             NoneTags = f.GetIds("noneTags"),
+            Untagged = f.TryGetProperty("untagged", out var ut) && ut.ValueKind == JsonValueKind.True,
             BpmMin = Number(f, "bpmMin"),
             BpmMax = Number(f, "bpmMax"),
             IncludeUnknownBpm = f.TryGetProperty("includeUnknownBpm", out var u) && u.ValueKind == JsonValueKind.True,

@@ -123,6 +123,9 @@ public sealed record TrackFilter
     /// <summary>Tracks must have none of these tags.</summary>
     public IReadOnlyList<long> NoneTags { get; init; } = [];
 
+    /// <summary>Tracks must carry no tags at all.</summary>
+    public bool Untagged { get; init; }
+
     public double? BpmMin { get; init; }
 
     public double? BpmMax { get; init; }
@@ -132,7 +135,7 @@ public sealed record TrackFilter
 
     [JsonIgnore]
     public bool IsEmpty =>
-        AllTags.Count == 0 && AnyTags.Count == 0 && NoneTags.Count == 0 && BpmMin is null && BpmMax is null;
+        AllTags.Count == 0 && AnyTags.Count == 0 && NoneTags.Count == 0 && !Untagged && BpmMin is null && BpmMax is null;
 }
 
 /// <summary>A BPM range; a null bound leaves that side open.</summary>

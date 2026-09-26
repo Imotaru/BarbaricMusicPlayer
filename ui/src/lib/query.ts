@@ -10,6 +10,8 @@ export interface TrackFilter {
   allTags: number[]
   anyTags: number[]
   noneTags: number[]
+  /** Only songs that carry no tags at all. */
+  untagged: boolean
   bpmMin: number | null
   bpmMax: number | null
   /** With a BPM bound set, also keep songs whose BPM isn't known. */
@@ -62,12 +64,14 @@ export interface SavedQuery {
 
 /**
  * The tag filter as the UI edits it: a set of included tags matched all-or-any, and a set of
- * excluded tags. A filter playlist can also carry its own BPM range, shown as a chip.
+ * excluded tags, or else just the untagged songs. A filter playlist can also carry its own BPM
+ * range, shown as a chip.
  */
 export interface TagFilter {
   include: number[]
   mode: 'all' | 'any'
   exclude: number[]
+  untagged: boolean
   bpmMin: number | null
   bpmMax: number | null
   includeUnknownBpm: boolean
@@ -77,13 +81,14 @@ export const emptyFilter = (): TagFilter => ({
   include: [],
   mode: 'all',
   exclude: [],
+  untagged: false,
   bpmMin: null,
   bpmMax: null,
   includeUnknownBpm: false,
 })
 
 export const isEmptyFilter = (f: TagFilter) =>
-  f.include.length === 0 && f.exclude.length === 0 && f.bpmMin === null && f.bpmMax === null
+  f.include.length === 0 && f.exclude.length === 0 && !f.untagged && f.bpmMin === null && f.bpmMax === null
 
 export function toTrackFilter(f: TagFilter): TrackFilter | null {
   if (isEmptyFilter(f)) return null
@@ -91,6 +96,7 @@ export function toTrackFilter(f: TagFilter): TrackFilter | null {
     allTags: f.mode === 'all' ? f.include : [],
     anyTags: f.mode === 'any' ? f.include : [],
     noneTags: f.exclude,
+    untagged: f.untagged,
     bpmMin: f.bpmMin,
     bpmMax: f.bpmMax,
     includeUnknownBpm: f.includeUnknownBpm,
@@ -103,7 +109,7 @@ export function toTrackFilter(f: TagFilter): TrackFilter | null {
  */
 export function withLens(filter: TrackFilter | null, lens: BpmRange | null): TrackFilter | null {
   if (!lens || isOpenRange(lens)) return filter
-  const f = filter ?? { allTags: [], anyTags: [], noneTags: [], bpmMin: null, bpmMax: null, includeUnknownBpm: false }
+  const f = filter ?? { allTags: [], anyTags: [], noneTags: [], untagged: false, bpmMin: null, bpmMax: null, includeUnknownBpm: false }
   const own = f.bpmMin !== null || f.bpmMax !== null
   const pick = (a: number | null, b: number | null, fn: (x: number, y: number) => number) =>
     a === null ? b : b === null ? a : fn(a, b)
@@ -123,6 +129,7 @@ export function fromTrackFilter(f: Partial<TrackFilter> | null | undefined): Tag
     include: all.length > 0 ? [...all] : [...any],
     mode: all.length === 0 && any.length > 0 ? 'any' : 'all',
     exclude: [...(f?.noneTags ?? [])],
+    untagged: f?.untagged ?? false,
     bpmMin: f?.bpmMin ?? null,
     bpmMax: f?.bpmMax ?? null,
     includeUnknownBpm: f?.includeUnknownBpm ?? false,
@@ -135,7 +142,7 @@ export function fromTrackFilter(f: Partial<TrackFilter> | null | undefined): Tag
  */
 export function sameView(context: QueryContext, saved: SavedQuery) {
   const key = (text: string | null, sort: SortKey, desc: boolean, filter: TrackFilter | null) => {
-    const f = filter ?? { allTags: [], anyTags: [], noneTags: [], bpmMin: null, bpmMax: null, includeUnknownBpm: false }
+    const f = filter ?? { allTags: [], anyTags: [], noneTags: [], untagged: false, bpmMin: null, bpmMax: null, includeUnknownBpm: false }
     const ids = (list: number[] | undefined) => [...(list ?? [])].sort((a, b) => a - b).join(',')
     return [
       (text ?? '').trim(),
@@ -144,6 +151,7 @@ export function sameView(context: QueryContext, saved: SavedQuery) {
       ids(f.allTags),
       ids(f.anyTags),
       ids(f.noneTags),
+      f.untagged ?? false,
       f.bpmMin ?? '',
       f.bpmMax ?? '',
       f.includeUnknownBpm && !isOpenRange({ min: f.bpmMin, max: f.bpmMax }),

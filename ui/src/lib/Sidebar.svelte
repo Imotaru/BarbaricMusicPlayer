@@ -152,6 +152,20 @@
         {:else}
           <li class="hint">Select songs and {#if keymap.label('selection.tag')}press <kbd>{keymap.label('selection.tag')}</kbd>{:else}right-click them{/if} to tag them.</li>
         {/each}
+        {#if tags.list.length > 0}
+          <li>
+            <button
+              class="item"
+              class:active={library.filter.untagged}
+              title="Songs without any tags, such as ones that just arrived"
+              onclick={library.showUntagged}
+            >
+              <span class="dot none"></span>
+              <span class="name">Untagged</span>
+              <span class="count">{library.counts.untagged.toLocaleString()}</span>
+            </button>
+          </li>
+        {/if}
       </ul>
     </section>
 
@@ -305,6 +319,11 @@
     margin: 0 2px 0 3px;
     border-radius: 50%;
     background: var(--c);
+  }
+
+  .dot.none {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--text-dim);
   }
 
   .name {

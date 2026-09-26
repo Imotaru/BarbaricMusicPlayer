@@ -4,7 +4,7 @@ using Dapper;
 namespace Barbaric.Core.Library;
 
 /// <summary>How many songs the extra library views hold.</summary>
-public sealed record LibraryCounts(long Suggested, long Hidden);
+public sealed record LibraryCounts(long Suggested, long Hidden, long Untagged);
 
 /// <summary>Listening history and what the user decided to do about songs they skip.</summary>
 public sealed class PlayStatsRepository(LibraryDatabase database, TimeProvider? clock = null)
@@ -127,7 +127,8 @@ public sealed class PlayStatsRepository(LibraryDatabase database, TimeProvider? 
             $"""
             SELECT
                 (SELECT count(*) FROM tracks t WHERE {TrackRepository.Visible} AND t.flagged = 1) AS suggested,
-                (SELECT count(*) FROM tracks t WHERE t.missing = 0 AND t.hidden = 1) AS hidden
+                (SELECT count(*) FROM tracks t WHERE t.missing = 0 AND t.hidden = 1) AS hidden,
+                (SELECT count(*) FROM tracks t WHERE {TrackRepository.Visible} AND {TrackRepository.Untagged}) AS untagged
             """);
     }
 

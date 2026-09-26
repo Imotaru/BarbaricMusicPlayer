@@ -16,6 +16,9 @@ public sealed class TrackRepository(LibraryDatabase database)
     /// <summary>The songs the library shows, for queries that alias <c>tracks</c> as <c>t</c>.</summary>
     internal const string Visible = "t.missing = 0 AND t.hidden = 0";
 
+    /// <summary>Songs that carry no tags, for queries that alias <c>tracks</c> as <c>t</c>.</summary>
+    internal const string Untagged = "NOT EXISTS (SELECT 1 FROM track_tags WHERE track_id = t.id)";
+
     private const string PendingBpm = "missing = 0 AND hidden = 0 AND bpm IS NULL AND bpm_source IS NULL";
 
     private const string RowColumns =
@@ -416,6 +419,11 @@ public sealed class TrackRepository(LibraryDatabase database)
             {
                 where.Add("t.id NOT IN (SELECT track_id FROM track_tags WHERE tag_id IN @noneTags)");
                 parameters.Add("noneTags", filter.NoneTags.Distinct().ToList());
+            }
+
+            if (filter.Untagged)
+            {
+                where.Add(Untagged);
             }
 
             AddBpmRange(where, parameters, "filterBpm", new BpmRange(filter.BpmMin, filter.BpmMax, filter.IncludeUnknownBpm));
