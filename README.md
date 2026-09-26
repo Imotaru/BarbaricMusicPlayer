@@ -32,6 +32,12 @@ ui/                         web UI
 - Node.js 22+
 - Microsoft Edge WebView2 Runtime (included with Windows 11)
 
+## Running
+
+Double-click `Barbaric Music Player.bat`. The first time, it builds a Release copy into `publish\` (this takes a minute), then it starts the player. To pick up new changes later, close the player and run `build.bat`.
+
+You can also pin `publish\Barbaric.App.exe` to the taskbar or Start menu. It opens files passed to it, so you can use it with "Open with".
+
 ## Development
 
 ```bash
