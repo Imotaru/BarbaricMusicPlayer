@@ -305,6 +305,18 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PlayShuffled_TurnsShuffleOn_AndQueuesEverySongOnce_WithoutASkip()
+    {
+        await _controller.PlayShuffledAsync(ByTitle);
+
+        Assert.True(_controller.Shuffle);
+        Assert.Equal(0, _controller.Queue.Index);
+        Assert.Equal(_ids.Values.Order(), _controller.Queue.Ids.Order());
+        Assert.Equal(_controller.Queue.Current, _controller.CurrentTrack?.Id);
+        Assert.Empty(_listens);
+    }
+
+    [Fact]
     public async Task TurningShuffleOnAndOff_KeepsThePlayingSong()
     {
         await _controller.PlayTrackAsync(_ids["B"], ByTitle);

@@ -83,6 +83,26 @@ public sealed class PlaybackController : IDisposable
         await PlayCurrentAsync(forward: true);
     }
 
+    /// <summary>
+    /// Plays the list shuffled, starting from a song shuffle picks, and turns shuffle on. Nothing is
+    /// skipped to get there, so no song is counted against.
+    /// </summary>
+    public async Task PlayShuffledAsync(TrackQuery context)
+    {
+        await FinishListeningAsync(LeaveReason.Switched);
+        var ids = await _tracks.QueryIdsAsync(context);
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        Shuffle = true;
+        _queueSource = context;
+        var stats = await _stats.GetShuffleStatsAsync(ids);
+        Queue.Set(SmartShuffle.Order(stats, _clock.GetUtcNow(), _random), 0);
+        await PlayCurrentAsync(forward: true);
+    }
+
     /// <summary>Plays any file. If it is part of the library, it plays as that track (with its saved volume).</summary>
     public async Task PlayFileAsync(string path)
     {

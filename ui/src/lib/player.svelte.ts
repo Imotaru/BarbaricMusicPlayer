@@ -59,6 +59,12 @@ class Player {
 
   playTrack = (id: number, context: QueryContext) => this.run(() => call('player.playTrack', { id, context }))
 
+  /** Turns shuffle on and plays the list from a song shuffle picks, so nothing has to be skipped. */
+  playShuffled = (context: QueryContext) => {
+    this.shuffle = true
+    this.run(() => call('player.playShuffled', { context }))
+  }
+
   /** Re-filters the queue by the BPM lens; the playing song carries on. */
   setBpmLens = (bpm: BpmRange | null) => this.run(() => call('player.setBpmLens', { bpm }))
 

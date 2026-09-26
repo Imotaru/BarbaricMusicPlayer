@@ -44,6 +44,13 @@ export const COMMANDS: Command[] = [
   { id: 'player.volumeUp', label: 'Volume up', group: 'Playback', global: true, run: () => player.changeVolume(0.05) },
   { id: 'player.volumeDown', label: 'Volume down', group: 'Playback', global: true, run: () => player.changeVolume(-0.05) },
   { id: 'player.shuffle', label: 'Shuffle on / off', group: 'Playback', global: true, run: player.toggleShuffle },
+  {
+    id: 'library.playShuffled',
+    label: 'Shuffle play this list',
+    group: 'Playback',
+    when: () => listShown() && library.total > 0 && view() !== 'suggested' && view() !== 'hidden',
+    run: library.playShuffled,
+  },
   { id: 'player.openFile', label: 'Open a file…', group: 'Playback', inInputs: true, run: player.openFile },
 
   { id: 'library.search', label: 'Search', group: 'Songs', inInputs: true, when: listShown, run: focusSearch },

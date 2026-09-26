@@ -13,6 +13,9 @@
       ? `${library.total.toLocaleString()} ${library.total === 1 ? 'match' : 'matches'}`
       : songs(library.total),
   )
+  const canShufflePlay = $derived(
+    library.loaded && library.total > 0 && library.view.kind !== 'suggested' && library.view.kind !== 'hidden',
+  )
 </script>
 
 <div class="view-header">
@@ -22,6 +25,11 @@
     <svg class="kind" viewBox="0 0 16 16" aria-label="Playlist"><path d="M2 4h9M2 8h9M2 12h6M13 10v5M10.5 12.5h5" /></svg>
   {/if}
   <h1 title={title}>{title}</h1>
+  {#if canShufflePlay}
+    <button class="play" onclick={library.playShuffled} aria-label="Shuffle play" title="Shuffle play: start from a random song">
+      <svg viewBox="0 0 16 16"><path d="M5 3.5v9l7.5-4.5z" /></svg>
+    </button>
+  {/if}
   {#if library.loaded}
     <span class="count">{count}</span>
   {/if}
@@ -86,6 +94,29 @@
     white-space: nowrap;
     font-size: 20px;
     font-weight: 650;
+  }
+
+  .play {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  .play:hover {
+    filter: brightness(1.1);
+  }
+
+  .play svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
   }
 
   .count {

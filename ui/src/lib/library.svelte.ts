@@ -491,6 +491,10 @@ class Library {
 
   playSelected = () => this.playIndex(this.cursor)
 
+  playShuffled = () => {
+    if (this.total > 0) player.playShuffled(this.context)
+  }
+
   /** Takes the selected songs out of the manual playlist being shown. */
   removeSelectedFromPlaylist = () => {
     const playlist = this.playlist
