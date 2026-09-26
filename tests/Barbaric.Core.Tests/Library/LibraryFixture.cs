@@ -17,6 +17,8 @@ public sealed class LibraryFixture : IDisposable
         Database = new LibraryDatabase(Path.Combine(Root, "library.db"));
         Tracks = new TrackRepository(Database);
         Folders = new FolderRepository(Database);
+        Tags = new TagRepository(Database);
+        Playlists = new PlaylistRepository(Database);
         Scanner = new LibraryScanner(Database);
     }
 
@@ -31,6 +33,10 @@ public sealed class LibraryFixture : IDisposable
     public FolderRepository Folders { get; }
 
     public LibraryScanner Scanner { get; }
+
+    public TagRepository Tags { get; }
+
+    public PlaylistRepository Playlists { get; }
 
     /// <summary>Writes a short tone (unique per call, so fingerprints differ) and tags it.</summary>
     public string AddSong(
@@ -75,6 +81,13 @@ public sealed class LibraryFixture : IDisposable
 
     public async Task<IReadOnlyList<TrackRow>> AllRowsAsync(TrackQuery? query = null) =>
         (await Tracks.QueryAsync(query ?? new TrackQuery(), 0, 1000)).Rows;
+
+    public async Task<IReadOnlyList<string>> TitlesAsync(TrackQuery? query = null) =>
+        (await AllRowsAsync(query)).Select(r => r.Title).ToList();
+
+    /// <summary>Track ids keyed by title, for tests that give every song a unique title.</summary>
+    public async Task<Dictionary<string, long>> IdsByTitleAsync() =>
+        (await AllRowsAsync()).ToDictionary(r => r.Title, r => r.Id);
 
     public void Dispose()
     {

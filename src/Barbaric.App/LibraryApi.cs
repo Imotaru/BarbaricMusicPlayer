@@ -44,9 +44,16 @@ public sealed class LibraryApi : IDisposable
             var limit = p.TryGetProperty("limit", out var l) ? l.GetInt32() : 200;
             return await Task.Run(() => _tracks.QueryAsync(query, offset, limit));
         });
+        bridge.QueryAsync("library.queryIds", async p =>
+        {
+            var query = ParseQuery(p);
+            var offset = p.TryGetProperty("offset", out var o) ? o.GetInt32() : 0;
+            var limit = p.TryGetProperty("limit", out var l) ? l.GetInt32() : int.MaxValue;
+            return await Task.Run(() => _tracks.QueryIdsAsync(query, offset, limit));
+        });
     }
 
-    /// <summary>Reads <c>{ text, sort, desc }</c> as sent by the UI.</summary>
+    /// <summary>Reads <c>{ text, sort, desc, filter, playlistId }</c> as sent by the UI.</summary>
     public static TrackQuery ParseQuery(JsonElement p)
     {
         if (p.ValueKind != JsonValueKind.Object)
@@ -59,7 +66,29 @@ public sealed class LibraryApi : IDisposable
             ? parsed
             : TrackSort.Artist;
         var desc = p.TryGetProperty("desc", out var d) && d.ValueKind == JsonValueKind.True;
-        return new TrackQuery(text, sort, desc);
+        var playlistId = p.TryGetProperty("playlistId", out var pl) && pl.ValueKind == JsonValueKind.Number ? pl.GetInt64() : (long?)null;
+        return new TrackQuery(text, sort, desc, ParseFilter(p), playlistId);
+    }
+
+    private static TrackFilter? ParseFilter(JsonElement p)
+    {
+        if (!p.TryGetProperty("filter", out var f) || f.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        static double? Number(JsonElement f, string name) =>
+            f.TryGetProperty(name, out var n) && n.ValueKind == JsonValueKind.Number ? n.GetDouble() : null;
+
+        var filter = new TrackFilter
+        {
+            AllTags = f.GetIds("allTags"),
+            AnyTags = f.GetIds("anyTags"),
+            NoneTags = f.GetIds("noneTags"),
+            BpmMin = Number(f, "bpmMin"),
+            BpmMax = Number(f, "bpmMax"),
+        };
+        return filter.IsEmpty ? null : filter;
     }
 
     /// <summary>Scans in the background. Requests made while a scan runs are folded into one follow-up scan.</summary>

@@ -1,11 +1,17 @@
 <script lang="ts">
+  import { openPlaylistPicker, openTagPicker } from './lib/actions'
   import { call, hasHost } from './lib/bridge'
+  import ContextMenu from './lib/ContextMenu.svelte'
   import { library } from './lib/library.svelte'
+  import Picker from './lib/Picker.svelte'
   import PlayerBar from './lib/PlayerBar.svelte'
   import { player } from './lib/player.svelte'
+  import { playlists } from './lib/playlists.svelte'
   import Sidebar from './lib/Sidebar.svelte'
   import TitleBar from './lib/TitleBar.svelte'
+  import Toast from './lib/Toast.svelte'
   import TrackList from './lib/TrackList.svelte'
+  import { ui } from './lib/ui.svelte'
 
   // Keep the native window border in sync with the theme background.
   if (hasHost) {
@@ -13,10 +19,20 @@
     call('window.setBackground', { color: background })
   }
 
+  // A playlist deleted elsewhere (or from its own menu) can't stay open.
+  $effect(() => {
+    if (library.view.kind !== 'library' && playlists.loaded && !playlists.byId.has(library.view.id)) {
+      library.openLibrary()
+    }
+  })
+
   const focusSearch = () => document.getElementById('search')?.focus()
 
   function onKeydown(e: KeyboardEvent) {
     const target = e.target as HTMLElement
+
+    // Menus, pickers and rename boxes handle their own keys.
+    if (ui.overlayOpen || ui.renaming) return
 
     if (e.ctrlKey && e.key.toLowerCase() === 'f') {
       e.preventDefault()
@@ -48,21 +64,40 @@
       player.previous()
     } else if (onSlider) {
       return
+    } else if (e.ctrlKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault()
+      library.selectAll()
+    } else if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      library.moveSelected(e.key === 'ArrowDown' ? 1 : -1)
     } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault()
       player.seekBy((e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 30 : 5))
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
-      library.moveSelection(e.key === 'ArrowDown' ? 1 : -1)
+      library.moveCursor(e.key === 'ArrowDown' ? 1 : -1, e.shiftKey)
     } else if (e.key === 'PageDown' || e.key === 'PageUp') {
       e.preventDefault()
-      library.moveSelection(e.key === 'PageDown' ? 15 : -15)
+      library.moveCursor(e.key === 'PageDown' ? 15 : -15, e.shiftKey)
     } else if (e.key === 'Home' || e.key === 'End') {
       e.preventDefault()
-      library.select(e.key === 'Home' ? 0 : Math.max(library.total - 1, 0))
+      library.moveCursor(e.key === 'Home' ? -library.total : library.total, e.shiftKey)
     } else if (e.key === 'Enter') {
       e.preventDefault()
       library.playSelected()
+    } else if (e.ctrlKey || e.altKey || e.metaKey) {
+      return
+    } else if (e.key === 't' || e.key === 'T') {
+      e.preventDefault()
+      openTagPicker()
+    } else if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault()
+      openPlaylistPicker()
+    } else if (e.key === 'Delete') {
+      e.preventDefault()
+      library.removeSelectedFromPlaylist()
+    } else if (e.key === 'Escape') {
+      if (!library.clearSelection() && library.hasFilter) library.clearFilter()
     }
   }
 </script>
@@ -85,6 +120,18 @@
   </div>
   <PlayerBar />
 </div>
+
+{#if ui.menu}
+  {#key ui.menu}
+    <ContextMenu at={ui.menu} items={ui.menu.items} />
+  {/key}
+{/if}
+{#if ui.picker}
+  {#key ui.picker}
+    <Picker mode={ui.picker.mode} trackIds={ui.picker.trackIds} at={ui.picker} />
+  {/key}
+{/if}
+<Toast />
 
 <style>
   .shell {

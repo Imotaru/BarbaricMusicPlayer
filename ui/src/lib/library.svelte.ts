@@ -1,7 +1,21 @@
 import { call, hasHost, on } from './bridge'
-import { player, type QueryContext } from './player.svelte'
+import { player } from './player.svelte'
+import { playlists, type Playlist } from './playlists.svelte'
+import {
+  emptyFilter,
+  fromTrackFilter,
+  isEmptyFilter,
+  sameView,
+  toTrackFilter,
+  type QueryContext,
+  type SavedQuery,
+  type SortKey,
+  type TagFilter,
+} from './query'
+import { tags } from './tags.svelte'
+import { ui } from './ui.svelte'
 
-export type SortKey = 'artist' | 'title' | 'album' | 'duration' | 'bpm' | 'added'
+export type { SortKey }
 
 export interface TrackRow {
   id: number
@@ -10,6 +24,9 @@ export interface TrackRow {
   album: string | null
   durationMs: number
   bpm: number | null
+  /** Zero-based place in the manual playlist being shown; null elsewhere. */
+  position: number | null
+  tagIds: number[]
 }
 
 export interface ScanStatus {
@@ -17,6 +34,9 @@ export interface ScanStatus {
   processed: number
   total: number
 }
+
+/** What the list shows: the whole library, a filter playlist loaded into the controls, or a manual playlist. */
+export type View = { kind: 'library' } | { kind: 'filter'; id: number } | { kind: 'manual'; id: number }
 
 interface QueryPage {
   total: number
@@ -28,27 +48,40 @@ const SEARCH_DEBOUNCE_MS = 60
 
 /**
  * The library list as a lazily loaded, paged view over the host's query results.
- * Rows are fetched a page at a time as the list scrolls; every change of search or sort bumps
- * `version`, and replies for older versions are dropped.
+ * Rows are fetched a page at a time as the list scrolls; every refresh bumps `version`, and
+ * replies for older versions are dropped.
+ *
+ * Selection: `cursor` is the row the keyboard acts on. Ctrl/Shift+click build an explicit
+ * `selection` of track ids; while it is empty, the cursor row counts as the selection.
  */
 class Library {
   folders = $state<string[]>([])
   scan = $state<ScanStatus>({ running: false, processed: 0, total: 0 })
+  view = $state<View>({ kind: 'library' })
   text = $state('')
   sort = $state<SortKey>('artist')
   desc = $state(false)
+  filter = $state<TagFilter>(emptyFilter())
   total = $state(0)
-  selected = $state(0)
+  cursor = $state(0)
+  /** Explicitly selected track ids, each mapped to the row index it had when selected (for list order). */
+  selection = $state.raw(new Map<number, number>())
   loaded = $state(false)
   error = $state<string | null>(null)
-  /** Bumped when the list should scroll back to the top (new search or sort). */
+  /** Bumped when the list should scroll back to the top (new search, sort, filter or view). */
   scrollResets = $state(0)
 
   private pages = $state.raw(new Map<number, TrackRow[]>())
   private version = 0
+  /** Bumped when the list's contents change identity, so late selection replies are dropped. */
+  private listId = 0
+  private anchor = 0
+  private moving = false
   private loading = new Set<number>()
   private visiblePages: number[] = [0]
   private debounce: ReturnType<typeof setTimeout> | undefined
+  /** The library view's sort, restored when coming back from a playlist. */
+  private librarySort: { sort: SortKey; desc: boolean } = { sort: 'artist', desc: false }
 
   constructor() {
     if (!hasHost) return
@@ -61,7 +94,33 @@ class Library {
   }
 
   get context(): QueryContext {
-    return { text: this.text, sort: this.sort, desc: this.desc }
+    return {
+      text: this.text,
+      sort: this.sort,
+      desc: this.desc,
+      filter: toTrackFilter(this.filter),
+      playlistId: this.view.kind === 'manual' ? this.view.id : null,
+    }
+  }
+
+  /** The playlist being shown, if any. */
+  get playlist(): Playlist | undefined {
+    return this.view.kind === 'library' ? undefined : playlists.byId.get(this.view.id)
+  }
+
+  /** A filter playlist whose search, filter or sort was changed since it was opened or saved. */
+  get dirty() {
+    const query = this.view.kind === 'filter' ? this.playlist?.query : null
+    return query != null && !sameView(this.context, query)
+  }
+
+  get hasFilter() {
+    return !isEmptyFilter(this.filter)
+  }
+
+  /** Rows can be rearranged only when the list shows the whole manual playlist in its own order. */
+  get canReorder() {
+    return this.view.kind === 'manual' && this.sort === 'position' && !this.desc && !this.text.trim() && !this.hasFilter
   }
 
   row(index: number): TrackRow | undefined {
@@ -79,40 +138,264 @@ class Library {
     }
   }
 
+  // ---- Views ----------------------------------------------------------------------------------
+
+  openLibrary = () => {
+    if (this.view.kind === 'library' && !this.text && !this.hasFilter) return
+    this.view = { kind: 'library' }
+    this.text = ''
+    this.filter = emptyFilter()
+    ;({ sort: this.sort, desc: this.desc } = this.librarySort)
+    this.resetList()
+  }
+
+  openPlaylist = (playlist: Playlist) => {
+    if (this.view.kind === 'library') this.librarySort = { sort: this.sort, desc: this.desc }
+    if (playlist.kind === 'manual') {
+      this.view = { kind: 'manual', id: playlist.id }
+      this.text = ''
+      this.filter = emptyFilter()
+      this.sort = 'position'
+      this.desc = false
+    } else {
+      this.view = { kind: 'filter', id: playlist.id }
+      this.load(playlist.query)
+    }
+    this.resetList()
+  }
+
+  /** Shows the whole library narrowed to one tag. */
+  showTag = (id: number) => {
+    if (this.view.kind !== 'library') {
+      this.view = { kind: 'library' }
+      ;({ sort: this.sort, desc: this.desc } = this.librarySort)
+    }
+    this.text = ''
+    this.filter = { ...emptyFilter(), include: [id] }
+    this.resetList()
+  }
+
+  /** Throws away edits to the open filter playlist. */
+  revert = () => {
+    if (this.view.kind !== 'filter' || !this.playlist) return
+    this.load(this.playlist.query)
+    this.resetList()
+  }
+
+  saveChanges = () => {
+    const playlist = this.playlist
+    if (this.view.kind !== 'filter' || !playlist) return
+    ui.run(() => playlists.updateFilter(playlist.id, this.context))
+  }
+
+  /** Saves the current search, filter and sort as a new filter playlist, then offers to name it. */
+  saveViewAsPlaylist = () =>
+    ui.run(async () => {
+      const id = await playlists.createFilter(this.suggestName(), this.context)
+      this.view = { kind: 'filter', id }
+      ui.renaming = { kind: 'playlist', id }
+    })
+
+  // ---- Search, sort and filter -----------------------------------------------------------------
+
   setText(text: string) {
     this.text = text
-    this.selected = 0
+    this.clearForNewList()
     clearTimeout(this.debounce)
     this.debounce = setTimeout(() => this.refresh({ resetScroll: true }), SEARCH_DEBOUNCE_MS)
   }
 
   setSort(key: SortKey) {
+    if (key === 'position' && this.view.kind !== 'manual') return
     if (this.sort === key) this.desc = !this.desc
     else {
       this.sort = key
       this.desc = false
     }
-    this.selected = 0
-    this.refresh({ resetScroll: true })
+    this.resetList()
   }
 
-  moveSelection(delta: number) {
+  setFilter(filter: TagFilter) {
+    this.filter = filter
+    this.resetList()
+  }
+
+  /** Ctrl+click on a sidebar tag: add it to (or take it out of) the included tags. */
+  toggleInclude = (id: number) => {
+    const f = this.filter
+    this.setFilter({
+      ...f,
+      include: f.include.includes(id) ? f.include.filter((t) => t !== id) : [...f.include, id],
+      exclude: f.exclude.filter((t) => t !== id),
+    })
+  }
+
+  /** Alt+click on a sidebar tag: exclude it (or stop excluding it). */
+  toggleExclude = (id: number) => {
+    const f = this.filter
+    this.setFilter({
+      ...f,
+      include: f.include.filter((t) => t !== id),
+      exclude: f.exclude.includes(id) ? f.exclude.filter((t) => t !== id) : [...f.exclude, id],
+    })
+  }
+
+  /** Filter chip click: an included tag becomes excluded and vice versa. */
+  flipTag = (id: number) => {
+    if (this.filter.include.includes(id)) this.toggleExclude(id)
+    else this.toggleInclude(id)
+  }
+
+  dropTag = (id: number) => {
+    const f = this.filter
+    if (!f.include.includes(id) && !f.exclude.includes(id)) return
+    this.setFilter({ ...f, include: f.include.filter((t) => t !== id), exclude: f.exclude.filter((t) => t !== id) })
+  }
+
+  setMatchMode = (mode: 'all' | 'any') => this.setFilter({ ...this.filter, mode })
+
+  clearFilter = () => this.setFilter({ ...emptyFilter(), bpmMin: this.filter.bpmMin, bpmMax: this.filter.bpmMax })
+
+  // ---- Selection -------------------------------------------------------------------------------
+
+  isSelected(index: number, id: number | undefined) {
+    return this.selection.size > 0 ? id !== undefined && this.selection.has(id) : index === this.cursor
+  }
+
+  get selectedCount() {
+    return this.selection.size > 0 ? this.selection.size : this.total > 0 ? 1 : 0
+  }
+
+  /** The selected track ids in list order (the cursor row when nothing is explicitly selected). */
+  selectedIds(): number[] {
+    if (this.selection.size > 0) {
+      return [...this.selection].sort((a, b) => a[1] - b[1]).map(([id]) => id)
+    }
+    const row = this.row(this.cursor)
+    return row ? [row.id] : []
+  }
+
+  /** A click on a row, following the usual Ctrl (toggle) and Shift (range) conventions. */
+  click(index: number, e: { ctrlKey: boolean; shiftKey: boolean }) {
+    if (e.shiftKey) {
+      this.cursor = index
+      this.selectRange(this.anchor, index, e.ctrlKey)
+      return
+    }
+
+    if (e.ctrlKey) {
+      const row = this.row(index)
+      if (!row) return
+      const next = new Map(this.selection)
+      // Ctrl+click extends the implicit selection rather than replacing it.
+      const current = this.row(this.cursor)
+      if (next.size === 0 && current && this.cursor !== index) next.set(current.id, this.cursor)
+      if (next.has(row.id)) next.delete(row.id)
+      else next.set(row.id, index)
+      this.selection = next
+      this.cursor = this.anchor = index
+      return
+    }
+
+    this.setCursor(index)
+  }
+
+  /** Right-click: keep the selection if the row is part of it, otherwise select just that row. */
+  contextSelect(index: number) {
+    if (!this.isSelected(index, this.row(index)?.id)) this.setCursor(index)
+  }
+
+  /** Arrow keys: move the cursor; with Shift, grow the selection from the anchor. */
+  moveCursor(delta: number, extend = false) {
     if (this.total === 0) return
-    this.selected = Math.min(Math.max(this.selected + delta, 0), this.total - 1)
+    const next = Math.min(Math.max(this.cursor + delta, 0), this.total - 1)
+    if (extend) {
+      this.cursor = next
+      this.selectRange(this.anchor, next, false)
+    } else {
+      this.setCursor(next)
+    }
   }
 
-  select(index: number) {
-    this.selected = index
+  setCursor(index: number) {
+    this.selection = new Map()
+    this.cursor = this.anchor = index
   }
+
+  selectAll = async () => {
+    const listId = this.listId
+    const ids = await call<number[]>('library.queryIds', this.queryParams())
+    if (listId !== this.listId) return
+    this.selection = new Map(ids.map((id, i) => [id, i]))
+  }
+
+  /** Returns false when there was no explicit selection to clear. */
+  clearSelection() {
+    if (this.selection.size === 0) return false
+    this.selection = new Map()
+    return true
+  }
+
+  // ---- Playback and playlist edits ---------------------------------------------------------------
 
   playIndex(index: number) {
     const row = this.row(index)
     if (!row) return
-    this.selected = index
+    this.cursor = index
     player.playTrack(row.id, this.context)
   }
 
-  playSelected = () => this.playIndex(this.selected)
+  playSelected = () => this.playIndex(this.cursor)
+
+  /** Takes the selected songs out of the manual playlist being shown. */
+  removeSelectedFromPlaylist = () => {
+    const playlist = this.playlist
+    const ids = this.selectedIds()
+    if (this.view.kind !== 'manual' || !playlist || ids.length === 0) return
+    ui.run(async () => {
+      await playlists.removeTracks(playlist.id, ids)
+      this.setCursor(Math.min(this.cursor, Math.max(this.total - ids.length - 1, 0)))
+      ui.notify(`Removed ${songs(ids.length)} from ${playlist.name}.`)
+    })
+  }
+
+  /** Alt+↑/↓: moves the selected songs one place up or down in the manual playlist. */
+  moveSelected = async (direction: -1 | 1) => {
+    const playlist = this.playlist
+    if (this.view.kind !== 'manual' || !playlist || this.moving) return
+    if (!this.canReorder) {
+      ui.notify('Sort by # and clear the search and filter to rearrange songs.')
+      return
+    }
+
+    const block =
+      this.selection.size > 0
+        ? [...this.selection].sort((a, b) => a[1] - b[1])
+        : this.row(this.cursor)
+          ? [[this.row(this.cursor)!.id, this.cursor] as [number, number]]
+          : []
+    if (block.length === 0) return
+
+    const first = block[0][1]
+    const contiguous = block.every(([, index], i) => index === first + i)
+    const to = Math.min(Math.max(first + direction, 0), this.total - block.length)
+    if (contiguous && to === first) return
+
+    this.moving = true
+    try {
+      await playlists.moveTracks(playlist.id, block.map(([id]) => id), to)
+      const cursorOffset = Math.max(block.findIndex(([, index]) => index === this.cursor), 0)
+      if (this.selection.size > 0) this.selection = new Map(block.map(([id], i) => [id, to + i]))
+      this.cursor = to + cursorOffset
+      this.anchor = to
+    } catch (e) {
+      ui.fail(e)
+    } finally {
+      this.moving = false
+    }
+  }
+
+  // ---- Folders ---------------------------------------------------------------------------------
 
   addFolder = async () => {
     const folders = await call<string[] | null>('library.addFolder')
@@ -125,9 +408,68 @@ class Library {
 
   rescan = () => call('library.rescan')
 
+  // ---- Internals -------------------------------------------------------------------------------
+
+  private load(query: SavedQuery | null | undefined) {
+    this.text = query?.text ?? ''
+    this.sort = query?.sort && query.sort !== 'position' ? query.sort : 'artist'
+    this.desc = query?.descending ?? false
+    this.filter = fromTrackFilter(query?.filter)
+  }
+
+  /** A name for a saved view, from its tags and search text: "chill + party −live “beat”". */
+  private suggestName() {
+    const names = (ids: number[]) => tags.resolve(ids).map((t) => t.name)
+    const parts = [
+      names(this.filter.include).join(this.filter.mode === 'all' ? ' + ' : ' / '),
+      names(this.filter.exclude)
+        .map((n) => `−${n}`)
+        .join(' '),
+      this.text.trim() ? `“${this.text.trim()}”` : '',
+    ].filter(Boolean)
+    return parts.join(' ') || 'New playlist'
+  }
+
+  private clearForNewList() {
+    this.listId++
+    this.selection = new Map()
+    this.cursor = this.anchor = 0
+  }
+
+  private resetList() {
+    clearTimeout(this.debounce)
+    this.clearForNewList()
+    this.refresh({ resetScroll: true })
+  }
+
+  private async selectRange(from: number, to: number, add: boolean) {
+    const lo = Math.min(from, to)
+    const hi = Math.max(from, to)
+    const listId = this.listId
+
+    let ids: number[] = []
+    for (let i = lo; i <= hi; i++) {
+      const row = this.row(i)
+      if (!row) {
+        ids = await call<number[]>('library.queryIds', this.queryParams(lo, hi - lo + 1))
+        if (listId !== this.listId) return
+        break
+      }
+      ids.push(row.id)
+    }
+
+    const next = add ? new Map(this.selection) : new Map<number, number>()
+    ids.forEach((id, i) => next.set(id, lo + i))
+    this.selection = next
+  }
+
+  private queryParams(offset?: number, limit?: number): Record<string, unknown> {
+    return { ...this.context, offset, limit }
+  }
+
   /**
    * Reloads the pages currently on screen and swaps them in together, so a refresh during a
-   * scan doesn't blank the list. Search and sort changes jump back to the top.
+   * scan doesn't blank the list. Search, sort, filter and view changes jump back to the top.
    */
   private async refresh({ resetScroll = false } = {}) {
     const version = ++this.version
@@ -140,7 +482,7 @@ class Library {
       this.pages = new Map(this.visiblePages.map((page, i) => [page, results[i].rows]))
       this.total = results[0]?.total ?? 0
       if (resetScroll) this.scrollResets++
-      this.selected = Math.min(this.selected, Math.max(this.total - 1, 0))
+      this.cursor = Math.min(this.cursor, Math.max(this.total - 1, 0))
       this.loaded = true
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e)
@@ -164,5 +506,7 @@ class Library {
     return call<QueryPage>('library.query', { ...this.context, offset: page * PAGE_SIZE, limit: PAGE_SIZE })
   }
 }
+
+export const songs = (n: number) => `${n.toLocaleString()} ${n === 1 ? 'song' : 'songs'}`
 
 export const library = new Library()

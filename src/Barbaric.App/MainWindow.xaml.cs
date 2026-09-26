@@ -108,6 +108,8 @@ public partial class MainWindow : Window
         RegisterWindowApi(_bridge);
         _player = new PlayerApi(_engine, _controller, _bridge, this);
         _library = new LibraryApi(new FolderRepository(database), tracks, new LibraryScanner(database), _bridge, this);
+        _ = new TagApi(new TagRepository(database), _bridge);
+        _ = new PlaylistApi(new PlaylistRepository(database), _bridge);
 
         core.Navigate(startUri.ToString());
         WebView.Focus();

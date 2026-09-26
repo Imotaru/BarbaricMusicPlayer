@@ -69,6 +69,38 @@ public sealed class LibraryDatabase
             VALUES (new.id, new.title, new.artist, new.album, new.album_artist, new.genre, new.file_name);
         END;
         """,
+        """
+        CREATE TABLE tags (
+            id    INTEGER PRIMARY KEY,
+            name  TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            color TEXT NOT NULL
+        );
+
+        CREATE TABLE track_tags (
+            track_id INTEGER NOT NULL REFERENCES tracks (id) ON DELETE CASCADE,
+            tag_id   INTEGER NOT NULL REFERENCES tags (id) ON DELETE CASCADE,
+            PRIMARY KEY (track_id, tag_id)
+        ) WITHOUT ROWID;
+
+        CREATE INDEX ix_track_tags_tag ON track_tags (tag_id, track_id);
+
+        CREATE TABLE playlists (
+            id          INTEGER PRIMARY KEY,
+            name        TEXT    NOT NULL,
+            kind        TEXT    NOT NULL CHECK (kind IN ('filter', 'manual')),
+            filter_json TEXT,
+            position    INTEGER NOT NULL
+        );
+
+        CREATE TABLE playlist_tracks (
+            playlist_id INTEGER NOT NULL REFERENCES playlists (id) ON DELETE CASCADE,
+            track_id    INTEGER NOT NULL REFERENCES tracks (id) ON DELETE CASCADE,
+            position    INTEGER NOT NULL,
+            PRIMARY KEY (playlist_id, track_id)
+        ) WITHOUT ROWID;
+
+        CREATE INDEX ix_playlist_tracks_position ON playlist_tracks (playlist_id, position);
+        """,
     ];
 
     private readonly string _connectionString;
@@ -86,6 +118,9 @@ public sealed class LibraryDatabase
             DataSource = path,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Pooling = true,
+
+            // SQLite leaves foreign keys off per connection; the tag and playlist cascades need them.
+            ForeignKeys = true,
         }.ToString();
 
         Migrate();

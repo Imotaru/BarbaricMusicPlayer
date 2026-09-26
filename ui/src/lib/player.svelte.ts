@@ -1,4 +1,5 @@
 import { call, hasHost, on } from './bridge'
+import type { QueryContext } from './query'
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused'
 
@@ -15,13 +16,6 @@ export interface PlayerSnapshot {
   volume: number
   hasNext: boolean
   hasPrevious: boolean
-}
-
-/** Which list a track was played from, so the host can queue the rest of it. */
-export interface QueryContext {
-  text: string
-  sort: string
-  desc: boolean
 }
 
 export const GAIN_MIN_DB = -24

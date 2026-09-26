@@ -9,6 +9,9 @@
   --accent: #ff5a36;
   --accent-contrast: #140a07;
   --track: #34343c;
+  --danger: #e5484d;
+  --popover: #202026;
+  --shadow: 0 12px 32px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.3);
   --titlebar-height: 36px;
 
   color-scheme: dark;
@@ -80,4 +83,13 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 input[type='range']:disabled {
   cursor: default;
   opacity: 0.4;
+}
+
+/* Floating surfaces: context menus, pickers and toasts. */
+.popover {
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  color: var(--text);
 }

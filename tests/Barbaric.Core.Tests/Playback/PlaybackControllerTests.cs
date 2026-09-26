@@ -110,6 +110,34 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PlayingFromAManualPlaylist_QueuesItInPlaylistOrder()
+    {
+        var playlist = await _library.Playlists.CreateManualAsync("Mix", [_ids["C"], _ids["A"]]);
+        var context = new TrackQuery(Sort: TrackSort.Position, PlaylistId: playlist);
+
+        await _controller.PlayTrackAsync(_ids["C"], context);
+        Assert.Equal(2, _controller.Queue.Count);
+
+        Assert.True(await _controller.NextAsync());
+        Assert.Equal("A", _controller.CurrentTrack?.Title);
+        Assert.False(_controller.Queue.HasNext);
+    }
+
+    [Fact]
+    public async Task PlayingFromATagFilter_QueuesOnlyMatchingSongs()
+    {
+        var tag = await _library.Tags.CreateAsync("keep");
+        await _library.Tags.AddToTracksAsync(tag.Id, [_ids["A"], _ids["C"]]);
+        var context = ByTitle with { Filter = new TrackFilter { AllTags = [tag.Id] } };
+
+        await _controller.PlayTrackAsync(_ids["A"], context);
+        await _controller.NextAsync();
+
+        Assert.Equal("C", _controller.CurrentTrack?.Title);
+        Assert.False(_controller.Queue.HasNext);
+    }
+
+    [Fact]
     public async Task PlayFile_UsesTheLibraryTrackWhenThereIsOne()
     {
         await _controller.PlayFileAsync(Path.Combine(_library.MusicDir, "c.wav"));
