@@ -54,18 +54,14 @@ public sealed class WebBridge
     public void QueryAsync(string method, Func<JsonElement, Task<object?>> handler) =>
         _handlers[method] = handler;
 
-    /// <summary>Pushes an event to the UI. Safe to call from any thread.</summary>
+    /// <summary>
+    /// Pushes an event to the UI. Safe to call from any thread. Events always go through the
+    /// dispatcher queue so they arrive in the order they were emitted, whichever thread sent them.
+    /// </summary>
     public void Emit(string eventName, object? data = null)
     {
         var json = JsonSerializer.Serialize(new { @event = eventName, data }, JsonOptions);
-        if (_dispatcher.CheckAccess())
-        {
-            _web.PostWebMessageAsJson(json);
-        }
-        else
-        {
-            _dispatcher.BeginInvoke(() => _web.PostWebMessageAsJson(json));
-        }
+        _dispatcher.BeginInvoke(() => _web.PostWebMessageAsJson(json));
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)

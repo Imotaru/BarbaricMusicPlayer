@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Media;
 using Barbaric.App.Bridge;
 using Barbaric.Core.Audio;
+using Barbaric.Core.Library;
+using Barbaric.Core.Playback;
 using Microsoft.Web.WebView2.Core;
 
 namespace Barbaric.App;
@@ -15,7 +17,9 @@ public partial class MainWindow : Window
 
     private readonly AudioEngine _engine = new();
     private WebBridge? _bridge;
+    private PlaybackController? _controller;
     private PlayerApi? _player;
+    private LibraryApi? _library;
 
     public MainWindow()
     {
@@ -42,7 +46,9 @@ public partial class MainWindow : Window
         Loaded += async (_, _) => await InitializeWebViewAsync();
         Closed += (_, _) =>
         {
+            _library?.Dispose();
             _player?.Dispose();
+            _controller?.Dispose();
             _engine.Dispose();
         };
     }
@@ -92,12 +98,22 @@ public partial class MainWindow : Window
         };
         core.NewWindowRequested += (_, e) => e.Handled = true;
 
+        // BARBARIC_LIBRARY_DB points development and test runs at a throwaway library.
+        var database = new LibraryDatabase(
+            Environment.GetEnvironmentVariable("BARBARIC_LIBRARY_DB") ?? LibraryDatabase.DefaultPath);
+        var tracks = new TrackRepository(database);
+        _controller = new PlaybackController(_engine, tracks, SynchronizationContext.Current);
+
         _bridge = new WebBridge(core, Dispatcher, origin);
         RegisterWindowApi(_bridge);
-        _player = new PlayerApi(_engine, _bridge, this);
+        _player = new PlayerApi(_engine, _controller, _bridge, this);
+        _library = new LibraryApi(new FolderRepository(database), tracks, new LibraryScanner(database), _bridge, this);
 
         core.Navigate(startUri.ToString());
         WebView.Focus();
+
+        // Pick up files added, moved or deleted while the app was closed.
+        _library.StartScan();
 
         // "Open with": a file path on the command line starts playing immediately.
         var args = Environment.GetCommandLineArgs();
