@@ -4,8 +4,9 @@ using NAudio.Wave;
 namespace Barbaric.Core.Audio;
 
 /// <summary>
-/// Plays one track at a time. Owns the decoder and the output device, and applies
-/// per-track gain (dB) combined with a master volume.
+/// Plays one track at a time. Owns the decoder and the output device, and applies the track's
+/// automatic gain (which evens out volume between songs) and the user's own gain, both in dB,
+/// combined with a master volume.
 /// </summary>
 public sealed class AudioEngine : IDisposable
 {
@@ -17,6 +18,8 @@ public sealed class AudioEngine : IDisposable
     private Task<IWavePlayer>? _pendingOutput;
     private int _generation;
     private double _trackGainDb;
+    private double _autoGainDb;
+    private bool _normalize = true;
     private float _masterVolume = 1f;
 
     /// <summary>
@@ -75,6 +78,28 @@ public sealed class AudioEngine : IDisposable
         }
     }
 
+    /// <summary>The gain that makes the loaded track as loud as the others; applied when <see cref="Normalize"/> is on.</summary>
+    public double AutoGainDb
+    {
+        get => _autoGainDb;
+        set
+        {
+            _autoGainDb = Gain.ClampDb(value);
+            ApplyGain();
+        }
+    }
+
+    /// <summary>Whether <see cref="AutoGainDb"/> applies. The user's <see cref="TrackGainDb"/> always does.</summary>
+    public bool Normalize
+    {
+        get => _normalize;
+        set
+        {
+            _normalize = value;
+            ApplyGain();
+        }
+    }
+
     /// <summary>Master volume, 0..1, applied on top of the track gain.</summary>
     public float MasterVolume
     {
@@ -86,7 +111,7 @@ public sealed class AudioEngine : IDisposable
         }
     }
 
-    public void Load(string path, double trackGainDb = 0)
+    public void Load(string path, double trackGainDb = 0, double autoGainDb = 0)
     {
         var reader = AudioDecoder.Open(path);
         CloseCurrent();
@@ -94,6 +119,7 @@ public sealed class AudioEngine : IDisposable
         _reader = reader;
         _chain = new GainSampleProvider(reader.ToSampleProvider(), _sync);
         _trackGainDb = Gain.ClampDb(trackGainDb);
+        _autoGainDb = Gain.ClampDb(autoGainDb);
         ApplyGain();
         CurrentPath = path;
         SetState(PlayerState.Stopped, force: true);
@@ -219,7 +245,8 @@ public sealed class AudioEngine : IDisposable
     {
         if (_chain is not null)
         {
-            _chain.Gain = Gain.DbToLinear(_trackGainDb) * _masterVolume;
+            var auto = _normalize ? Gain.DbToLinear(_autoGainDb) : 1f;
+            _chain.Gain = auto * Gain.DbToLinear(_trackGainDb) * _masterVolume;
         }
     }
 

@@ -16,6 +16,19 @@ public class GainTests
         Assert.Equal(expected, Gain.DbToLinear(db), precision: 3);
     }
 
+    [Theory]
+    [InlineData(null, null, 0.0)] // not measured: played as is
+    [InlineData(-8.0, -0.1, -6.0)] // loud song turned down
+    [InlineData(-16.0, -10.0, 2.0)] // quiet song turned up, with room to spare
+    [InlineData(-16.0, -2.0, 1.5)] // turned up only until its peak is 0.5 dB below full scale
+    [InlineData(-16.0, 0.0, 0.0)] // no room to turn up, but never turned down for it
+    [InlineData(-60.0, -40.0, 12.0)] // clamped to MaxDb
+    [InlineData(20.0, 0.0, -24.0)] // clamped to MinDb
+    public void AutoGainDb_BringsLoudPartsToTheTarget(double? loudness, double? peak, double expected)
+    {
+        Assert.Equal(expected, Gain.AutoGainDb(loudness, peak), precision: 2);
+    }
+
     [Fact]
     public void GainSampleProvider_ScalesAndLimitsSamples()
     {

@@ -114,7 +114,11 @@ public sealed record BackupSong
 
     public double? BpmConfidence { get; init; }
 
+    /// <summary>The user's volume adjustment, on top of the automatic one.</summary>
     public double GainDb { get; init; }
+
+    /// <summary>The song's measured volume; absent when it wasn't measured yet.</summary>
+    public BackupLoudness? Loudness { get; init; }
 
     public long Plays { get; init; }
 
@@ -132,6 +136,9 @@ public sealed record BackupSong
 
     public IReadOnlyList<BackupPlayEvent> History { get; init; } = [];
 }
+
+/// <summary>A song's volume measurement; null values mean it was measured as silent or couldn't be decoded.</summary>
+public sealed record BackupLoudness(double? LoudPartLufs, double? PeakDb);
 
 public sealed record BackupPlayEvent(DateTimeOffset At, long PlayedMs, long DurationMs, PlayKind Kind);
 

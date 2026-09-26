@@ -3,12 +3,14 @@
   import { commandById, COMMANDS, type Command } from './commands'
   import { chordLabel, chordOf, RESERVED } from './keys'
   import { keymap } from './keymap.svelte'
+  import { player } from './player.svelte'
   import { prefs } from './prefs.svelte'
   import { THEMES, themeById } from './themes'
   import { ui, type SettingsTab } from './ui.svelte'
 
   const tabs: { id: SettingsTab; label: string }[] = [
     { id: 'appearance', label: 'Appearance' },
+    { id: 'playback', label: 'Playback' },
     { id: 'keyboard', label: 'Keyboard' },
     { id: 'backup', label: 'Backup' },
   ]
@@ -182,6 +184,19 @@
               <button class="link" onclick={() => prefs.setAccent(null)}>Use the theme's accent</button>
             {/if}
           </div>
+        </section>
+      {:else if ui.settings === 'playback'}
+        <section>
+          <h3>Volume</h3>
+          <label class="check">
+            <input type="checkbox" checked={player.normalize} onchange={(e) => player.setNormalize(e.currentTarget.checked)} />
+            Play every song equally loud
+          </label>
+          <p class="intro">
+            Each song's volume is measured once, in the background, by how loud its loud parts get, so a quiet intro
+            doesn't fool it. Quiet songs are only turned up as far as they can go without distorting. The Song slider
+            still adjusts a song from there.
+          </p>
         </section>
       {:else if ui.settings === 'backup'}
         <section>
@@ -474,6 +489,19 @@
 
   .link:hover {
     text-decoration: underline;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .check input {
+    margin: 0;
+    accent-color: var(--accent);
   }
 
   .intro {

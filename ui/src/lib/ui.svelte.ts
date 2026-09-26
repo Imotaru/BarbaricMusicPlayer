@@ -27,7 +27,7 @@ export interface Confirm {
   action: () => void
 }
 
-export type SettingsTab = 'appearance' | 'keyboard' | 'backup'
+export type SettingsTab = 'appearance' | 'playback' | 'keyboard' | 'backup'
 
 /** A song from an imported backup whose file couldn't be found. */
 export interface MissingSong {

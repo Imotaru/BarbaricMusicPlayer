@@ -55,14 +55,22 @@ public sealed class SettingsTests : IDisposable
     {
         using (var connection = _library.Database.Open())
         {
-            connection.Execute("DROP TABLE settings; ALTER TABLE tracks DROP COLUMN overrides; PRAGMA user_version = 3;");
+            connection.Execute(
+                """
+                DROP TABLE settings;
+                ALTER TABLE tracks DROP COLUMN overrides;
+                ALTER TABLE tracks DROP COLUMN loudness_lufs;
+                ALTER TABLE tracks DROP COLUMN peak_db;
+                ALTER TABLE tracks DROP COLUMN loudness_analyzed;
+                PRAGMA user_version = 3;
+                """);
         }
 
         var reopened = new LibraryDatabase(Path.Combine(_library.Root, "library.db"));
         new SettingsRepository(reopened).Set("volume", 0.5);
 
         using var check = reopened.Open();
-        Assert.Equal(5, check.ExecuteScalar<long>("PRAGMA user_version;"));
+        Assert.Equal(6, check.ExecuteScalar<long>("PRAGMA user_version;"));
         Assert.Equal(0.5, new SettingsRepository(reopened).Get<double>("volume"));
     }
 }

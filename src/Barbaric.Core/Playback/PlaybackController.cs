@@ -64,6 +64,9 @@ public sealed class PlaybackController : IDisposable
     /// </summary>
     public event EventHandler<Track>? TrackUpdated;
 
+    /// <summary>Raised after a library song was loaded, before it starts playing.</summary>
+    public event EventHandler<Track>? TrackLoaded;
+
     public PlayQueue Queue { get; } = new();
 
     /// <summary>The library track that is loaded, or null for a file played from outside the library.</summary>
@@ -78,6 +81,9 @@ public sealed class PlaybackController : IDisposable
     /// Whether Next has somewhere to go. A list always does: after its last song it starts over.
     /// </summary>
     public bool HasNext => Queue.HasNext || (_queueSource is not null && Queue.Count > 0);
+
+    /// <summary>The song Next goes to within the current run through the list, if there is one.</summary>
+    public long? UpcomingId => Queue.HasNext ? Queue.Ids[Queue.Index + 1] : null;
 
     /// <summary>Plays a track and queues the rest of the list it was picked from.</summary>
     public async Task PlayTrackAsync(long id, TrackQuery? context = null)
@@ -318,6 +324,29 @@ public sealed class PlaybackController : IDisposable
         TrackUpdated?.Invoke(this, track);
     }
 
+    /// <summary>
+    /// Takes a new volume measurement of a song. The loaded song picks it up only if it hasn't started
+    /// yet, so the volume never jumps mid-song; otherwise it applies the next time the song is loaded.
+    /// </summary>
+    /// <returns>Whether the song is the loaded one.</returns>
+    public bool UpdateLoudness(long id, double? loudnessLufs, double? peakDb)
+    {
+        if (CurrentTrack is not { } track || track.Id != id)
+        {
+            return false;
+        }
+
+        track.LoudnessLufs = loudnessLufs;
+        track.PeakDb = peakDb;
+        track.LoudnessAnalyzed = true;
+        if (_engine.State != PlayerState.Playing && _engine.Position == TimeSpan.Zero)
+        {
+            _engine.AutoGainDb = track.AutoGainDb;
+        }
+
+        return true;
+    }
+
     public void Dispose()
     {
         _engine.TrackEnded -= OnTrackEnded;
@@ -448,7 +477,7 @@ public sealed class PlaybackController : IDisposable
         CurrentTrack = track;
         try
         {
-            _engine.Load(track.Path, track.GainDb);
+            _engine.Load(track.Path, track.GainDb, track.AutoGainDb);
         }
         catch (Exception ex)
         {
@@ -467,6 +496,7 @@ public sealed class PlaybackController : IDisposable
             _ = SaveDurationAsync(track);
         }
 
+        TrackLoaded?.Invoke(this, track);
         return true;
     }
 

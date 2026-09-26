@@ -126,6 +126,13 @@ public sealed class LibraryDatabase
         -- hold what is shown; a key here keeps a rescan from overwriting that column with the file's tag.
         ALTER TABLE tracks ADD COLUMN overrides TEXT;
         """,
+        """
+        -- How loud the song's loud parts are and its loudest sample, for automatic volume. NULL after
+        -- analysis means silent or undecodable; loudness_analyzed = 0 means not measured yet.
+        ALTER TABLE tracks ADD COLUMN loudness_lufs REAL;
+        ALTER TABLE tracks ADD COLUMN peak_db REAL;
+        ALTER TABLE tracks ADD COLUMN loudness_analyzed INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     private readonly string _connectionString;

@@ -21,6 +21,8 @@ public sealed class TrackRepository(LibraryDatabase database)
 
     private const string PendingBpm = "missing = 0 AND hidden = 0 AND bpm IS NULL AND bpm_source IS NULL";
 
+    private const string PendingLoudness = "missing = 0 AND hidden = 0 AND loudness_analyzed = 0";
+
     private const string RowColumns =
         "t.id, t.title, t.artist, t.album, t.path, t.duration_ms, t.bpm, t.bpm_source, t.bpm_confidence, t.play_count, t.skip_count, " +
         "(SELECT group_concat(tag_id) FROM track_tags WHERE track_id = t.id) AS tag_id_list";
@@ -153,6 +155,33 @@ public sealed class TrackRepository(LibraryDatabase database)
             WHERE id = @id AND bpm_source IS NOT 'manual'
             """,
             new { id, bpm = result?.Bpm, confidence = result?.Confidence });
+        return changed > 0;
+    }
+
+    /// <summary>Tracks whose volume hasn't been measured yet, most played first.</summary>
+    public async Task<IReadOnlyList<(long Id, string Path)>> GetLoudnessPendingAsync(int limit)
+    {
+        using var connection = database.Open();
+        var rows = await connection.QueryAsync<(long, string)>(
+            $"SELECT id, path FROM tracks WHERE {PendingLoudness} ORDER BY play_count DESC, added_utc DESC, id DESC LIMIT @limit",
+            new { limit });
+        return rows.AsList();
+    }
+
+    public async Task<int> CountLoudnessPendingAsync()
+    {
+        using var connection = database.Open();
+        return await connection.ExecuteScalarAsync<int>($"SELECT count(*) FROM tracks WHERE {PendingLoudness}");
+    }
+
+    /// <summary>Stores a volume measurement. A null result records a silent or undecodable song, played as is.</summary>
+    /// <returns>False when the track no longer exists.</returns>
+    public async Task<bool> SaveLoudnessAsync(long id, LoudnessResult? result)
+    {
+        using var connection = database.Open();
+        var changed = await connection.ExecuteAsync(
+            "UPDATE tracks SET loudness_lufs = @loudness, peak_db = @peak, loudness_analyzed = 1 WHERE id = @id",
+            new { id, loudness = result?.LoudPartLufs, peak = result?.PeakDb });
         return changed > 0;
     }
 

@@ -120,6 +120,22 @@ public sealed class AudioEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task AutoGain_AddsToTrackGain_UnlessNormalizeIsOff()
+    {
+        _engine.Load(_tonePath, trackGainDb: -3, autoGainDb: -3);
+        await _engine.PlayAsync();
+        var normalized = Peak(_output.DrainToEnd());
+
+        _engine.Normalize = false;
+        _engine.Load(_tonePath, trackGainDb: -3, autoGainDb: -3);
+        await _engine.PlayAsync();
+        var plain = Peak(_output.DrainToEnd());
+
+        Assert.Equal(0.5 * 0.501, normalized, precision: 2);
+        Assert.Equal(0.5 * 0.708, plain, precision: 2);
+    }
+
+    [Fact]
     public async Task LoadingWhileDeviceStarts_DiscardsTheStaleDevice()
     {
         var slowDevice = new TaskCompletionSource<IWavePlayer>();

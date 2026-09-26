@@ -3,6 +3,7 @@
 import { bpm } from './bpm.svelte'
 import { keymap } from './keymap.svelte'
 import { library, songs } from './library.svelte'
+import { loudness } from './loudness.svelte'
 import { playlists, type Playlist } from './playlists.svelte'
 import { tags, type Tag } from './tags.svelte'
 import { ui, type MenuItem, type Point } from './ui.svelte'
@@ -65,6 +66,7 @@ export function openRowMenu(at: Point, index: number) {
     { label: 'Double BPM', action: () => bpm.scaleSelected(2) },
     { label: 'Halve BPM', action: () => bpm.scaleSelected(0.5) },
     { label: count > 1 ? `Analyze BPM of ${songs(count)}` : 'Analyze BPM', action: bpm.analyzeSelected },
+    { label: count > 1 ? `Measure volume of ${songs(count)}` : 'Measure volume', action: loudness.analyzeSelected },
     { separator: true },
     { label: 'Edit skips…', shortcut: keymap.label('selection.skips'), action: () => openSkipsEditor(at) },
     {

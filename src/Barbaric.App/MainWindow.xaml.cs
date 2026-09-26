@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private PlayerApi? _player;
     private LibraryApi? _library;
     private BpmApi? _bpm;
+    private LoudnessApi? _loudness;
     private MediaControls? _media;
 
     public MainWindow()
@@ -86,6 +87,7 @@ public partial class MainWindow : Window
             _hotkeys.Dispose();
             _media?.Dispose();
             _bpm?.Dispose();
+            _loudness?.Dispose();
             _library?.Dispose();
             _player?.Dispose();
 
@@ -172,12 +174,17 @@ public partial class MainWindow : Window
         _ = new TagApi(new TagRepository(_database), _bridge);
         _ = new PlaylistApi(new PlaylistRepository(_database), _bridge);
         _bpm = new BpmApi(new BpmBackgroundAnalyzer(tracks), tracks, _bridge);
+        _loudness = new LoudnessApi(new LoudnessBackgroundAnalyzer(tracks), tracks, _controller, _player, _bridge, Dispatcher);
         _ = new BackupApi(new LibraryBackup(_database), _library, _settings, ApplyBackupSettings, _bridge, this);
         _media = MediaControls.TryCreate(new WindowInteropHelper(this).Handle, _player);
         TaskbarButtons.Attach(this, _player);
 
         // Analysis waits for the startup scan, and each rescan hands it the songs it found.
-        _library.ScanCompleted += (_, _) => _bpm.StartBackground();
+        _library.ScanCompleted += (_, _) =>
+        {
+            _bpm.StartBackground();
+            _loudness.StartBackground();
+        };
 
         // "Open with": a file path on the command line starts playing immediately; otherwise the
         // last queue comes back, paused. Either happens before the page asks for the player state.
@@ -219,6 +226,11 @@ public partial class MainWindow : Window
         if (settings.TryGetValue(PlayerApi.LoopTrackKey, out var loop) && loop.ValueKind is JsonValueKind.True or JsonValueKind.False)
         {
             _player?.SetLoop(loop.GetBoolean());
+        }
+
+        if (settings.TryGetValue(PlayerApi.NormalizeKey, out var normalize) && normalize.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            _player?.SetNormalize(normalize.GetBoolean());
         }
 
         if (settings.TryGetValue(GlobalHotkeys.SettingsKey, out var hotkeys) && hotkeys.ValueKind == JsonValueKind.Object)

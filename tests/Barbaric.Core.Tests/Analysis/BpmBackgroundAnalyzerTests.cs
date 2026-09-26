@@ -9,7 +9,7 @@ public sealed class BpmBackgroundAnalyzerTests : IAsyncLifetime
 {
     private readonly LibraryFixture _library = new();
     private readonly ConcurrentQueue<string> _analyzedPaths = new();
-    private readonly ConcurrentQueue<BpmStatus> _statuses = new();
+    private readonly ConcurrentQueue<AnalysisStatus> _statuses = new();
     private readonly ConcurrentQueue<BpmInfo> _results = new();
     private Dictionary<string, long> _ids = [];
 
@@ -48,7 +48,7 @@ public sealed class BpmBackgroundAnalyzerTests : IAsyncLifetime
         Assert.Equal(105, (await _library.Tracks.GetAsync(_ids["Song 5"]))!.Bpm);
         Assert.Equal(5, _results.Count);
 
-        Assert.Equal(new BpmStatus(false, 5, 5), _statuses.Last());
+        Assert.Equal(new AnalysisStatus(false, 5, 5), _statuses.Last());
         Assert.Contains(_statuses, s => s.Running && s.Total == 5 && s.Done < 5);
     }
 
@@ -116,7 +116,7 @@ public sealed class BpmBackgroundAnalyzerTests : IAsyncLifetime
         var pending = await _library.Tracks.GetBpmPendingAsync(10);
         Assert.Equal([_ids["Song 1"]], pending.Select(p => p.Id));
         Assert.Equal("analyzed", (await _library.Tracks.GetAsync(_ids["Song 2"]))!.BpmSource);
-        Assert.Equal(new BpmStatus(false, 5, 5), analyzer.Status);
+        Assert.Equal(new AnalysisStatus(false, 5, 5), analyzer.Status);
     }
 
     private BpmBackgroundAnalyzer Create()

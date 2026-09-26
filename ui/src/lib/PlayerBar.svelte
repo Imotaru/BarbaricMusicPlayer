@@ -8,6 +8,13 @@
   const shownPosition = $derived(scrubbing ?? player.position)
   const progress = $derived(player.duration > 0 ? (shownPosition / player.duration) * 100 : 0)
   const gainProgress = $derived(((player.trackGainDb - GAIN_MIN_DB) / (GAIN_MAX_DB - GAIN_MIN_DB)) * 100)
+  const songGainTitle = $derived.by(() => {
+    const base = 'Volume for this song only — remembered per song. Double-click to reset.'
+    if (!player.loaded || !player.normalize) return base
+    const auto = player.autoGainDb === null ? 'not measured yet' : formatGain(player.autoGainDb)
+    return `${base}
+Adjusts on top of the automatic level (${auto}) that evens it out with other songs.`
+  })
 
   // With nothing loaded, the play button starts the selected song in the list.
   const playOrToggle = () => (player.loaded ? player.toggle() : library.playSelected())
@@ -96,7 +103,7 @@
   </div>
 
   <div class="levels">
-    <label title="Volume for this song only — remembered per song. Double-click to reset.">
+    <label title={songGainTitle}>
       <span>Song</span>
       <input
         type="range"

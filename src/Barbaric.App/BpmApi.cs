@@ -92,7 +92,7 @@ public sealed class BpmApi : IDisposable
     }
 
     // The worker reports from its own thread after every track; batch those into a few events a second.
-    private void OnStatusChanged(object? sender, BpmStatus status)
+    private void OnStatusChanged(object? sender, AnalysisStatus status)
     {
         lock (_sync)
         {

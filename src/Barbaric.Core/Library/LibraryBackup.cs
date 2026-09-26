@@ -51,8 +51,8 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
         var tracks = await connection.QueryAsync<TrackRecord>(
             """
             SELECT id, path, file_name, fingerprint, file_size, duration_ms, title, artist, album, album_artist, genre,
-                   year, track_number, overrides, bpm, bpm_source, bpm_confidence, gain_db, play_count, skip_count,
-                   last_played_utc, added_utc, flagged, hidden
+                   year, track_number, overrides, bpm, bpm_source, bpm_confidence, gain_db, loudness_lufs, peak_db,
+                   loudness_analyzed, play_count, skip_count, last_played_utc, added_utc, flagged, hidden
             FROM tracks ORDER BY id
             """,
             transaction: transaction);
@@ -77,6 +77,7 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
             BpmSource = t.BpmSource,
             BpmConfidence = t.BpmConfidence,
             GainDb = t.GainDb,
+            Loudness = t.LoudnessAnalyzed ? new BackupLoudness(t.LoudnessLufs, t.PeakDb) : null,
             Plays = t.PlayCount,
             Skips = t.SkipCount,
             LastPlayed = t.LastPlayedUtc is { } played ? Time(played) : null,
@@ -288,6 +289,19 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
             parameters.Add("bpmConfidence", song.BpmConfidence);
         }
 
+        // A measurement only describes the same content; a song matched by path whose file changed is measured anew.
+        if (song.Loudness is { } loudness)
+        {
+            set.Add("""
+                loudness_lufs = CASE WHEN fingerprint = @fingerprint THEN @loudness ELSE loudness_lufs END,
+                peak_db = CASE WHEN fingerprint = @fingerprint THEN @peak ELSE peak_db END,
+                loudness_analyzed = CASE WHEN fingerprint = @fingerprint THEN 1 ELSE loudness_analyzed END
+                """);
+            parameters.Add("fingerprint", song.Fingerprint);
+            parameters.Add("loudness", loudness.LoudPartLufs);
+            parameters.Add("peak", loudness.PeakDb);
+        }
+
         await connection.ExecuteAsync($"UPDATE tracks SET {string.Join(", ", set)} WHERE id = @id", parameters, transaction);
     }
 
@@ -299,10 +313,11 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
             """
             INSERT INTO tracks (path, file_name, fingerprint, file_size, modified_utc, title, artist, album, album_artist,
                                 genre, year, track_number, duration_ms, bpm, bpm_confidence, bpm_source, gain_db,
-                                play_count, skip_count, last_played_utc, flagged, missing, hidden, added_utc, overrides)
+                                loudness_lufs, peak_db, loudness_analyzed, play_count, skip_count, last_played_utc,
+                                flagged, missing, hidden, added_utc, overrides)
             VALUES (@path, @fileName, @fingerprint, @fileSize, 0, @title, @artist, @album, @albumArtist,
                     @genre, @year, @trackNumber, @durationMs, @bpm, @bpmConfidence, @bpmSource, @gainDb,
-                    @plays, @skips, @lastPlayed, @flagged, 1, @hidden, @added, @overrides)
+                    @loudness, @peak, @loudnessAnalyzed, @plays, @skips, @lastPlayed, @flagged, 1, @hidden, @added, @overrides)
             RETURNING id
             """,
             new
@@ -323,6 +338,9 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
                 bpmConfidence = bpmSource is null ? null : song.BpmConfidence,
                 bpmSource,
                 gainDb = song.GainDb,
+                loudness = song.Loudness?.LoudPartLufs,
+                peak = song.Loudness?.PeakDb,
+                loudnessAnalyzed = song.Loudness is not null,
                 plays = Math.Max(0, song.Plays),
                 skips = Math.Max(0, song.Skips),
                 lastPlayed = song.LastPlayed?.UtcTicks,
@@ -580,6 +598,12 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
         public double? BpmConfidence { get; set; }
 
         public double GainDb { get; set; }
+
+        public double? LoudnessLufs { get; set; }
+
+        public double? PeakDb { get; set; }
+
+        public bool LoudnessAnalyzed { get; set; }
 
         public long PlayCount { get; set; }
 

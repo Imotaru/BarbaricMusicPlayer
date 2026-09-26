@@ -1,4 +1,5 @@
 using System.Text;
+using Barbaric.Core.Analysis;
 using Barbaric.Core.Library;
 using Barbaric.Core.Playback;
 using Dapper;
@@ -35,6 +36,7 @@ public sealed class LibraryBackupTests : IDisposable
         await _source.Tracks.SetInfoAsync([ids["One"]], new Dictionary<TrackField, object?> { [TrackField.Artist] = "Edited" });
         await _source.Tracks.SetManualBpmAsync([ids["Two"]], 128);
         await _source.Tracks.SetGainAsync(ids["Three"], -3);
+        await _source.Tracks.SaveLoudnessAsync(ids["Two"], new LoudnessResult(-9.5, -0.3));
         await _source.Stats.RecordAsync(ids["One"], 500, 500, PlayKind.Complete);
         await _source.Stats.RecordAsync(ids["Two"], 10, 500, PlayKind.Skip);
         await _source.Stats.SetHiddenAsync([ids["Three"]], true);
@@ -70,6 +72,11 @@ public sealed class LibraryBackupTests : IDisposable
 
         var three = (await _target.Tracks.GetAsync(target["Three"]))!;
         Assert.Equal(-3, three.GainDb);
+        Assert.False(three.LoudnessAnalyzed);
+
+        var measured = (await _target.Tracks.GetAsync(target["Two"]))!;
+        Assert.True(measured.LoudnessAnalyzed);
+        Assert.Equal((-9.5, -0.3), (measured.LoudnessLufs!.Value, measured.PeakDb!.Value));
         Assert.True(three.Hidden);
 
         var one = (await _target.Tracks.GetAsync(target["One"]))!;

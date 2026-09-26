@@ -13,6 +13,9 @@ export interface PlayerSnapshot {
   duration: number
   position: number
   trackGainDb: number
+  /** The gain that evens this song out with the others; null until it's measured. */
+  autoGainDb: number | null
+  normalize: boolean
   volume: number
   hasNext: boolean
   hasPrevious: boolean
@@ -34,6 +37,8 @@ class Player {
   duration = $state(0)
   position = $state(0)
   trackGainDb = $state(0)
+  autoGainDb = $state<number | null>(null)
+  normalize = $state(true)
   volume = $state(1)
   hasNext = $state(false)
   hasPrevious = $state(false)
@@ -101,6 +106,12 @@ class Player {
     this.run(() => call('player.setTrackGain', { db }))
   }
 
+  /** Plays every song equally loud; the Song slider then adjusts from there. */
+  setNormalize = (on: boolean) => {
+    this.normalize = on
+    this.run(() => call('player.setNormalize', { on }))
+  }
+
   setVolume = (volume: number) => {
     this.volume = Math.min(Math.max(volume, 0), 1)
     this.run(() => call('player.setVolume', { volume: this.volume }))
@@ -118,6 +129,8 @@ class Player {
     this.duration = s.duration
     this.position = s.position
     this.trackGainDb = s.trackGainDb
+    this.autoGainDb = s.autoGainDb
+    this.normalize = s.normalize
     this.volume = s.volume
     this.hasNext = s.hasNext
     this.hasPrevious = s.hasPrevious

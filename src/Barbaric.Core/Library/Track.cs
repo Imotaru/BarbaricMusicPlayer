@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Barbaric.Core.Audio;
 
 namespace Barbaric.Core.Library;
 
@@ -39,7 +40,18 @@ public sealed class Track
 
     public string? BpmSource { get; set; }
 
+    /// <summary>The user's volume adjustment for this song, on top of <see cref="AutoGainDb"/>.</summary>
     public double GainDb { get; set; }
+
+    /// <summary>How loud the song's loud parts are; null when not measured yet, silent or undecodable.</summary>
+    public double? LoudnessLufs { get; set; }
+
+    public double? PeakDb { get; set; }
+
+    public bool LoudnessAnalyzed { get; set; }
+
+    /// <summary>The gain that makes this song as loud as the others.</summary>
+    public double AutoGainDb => Gain.AutoGainDb(LoudnessLufs, PeakDb);
 
     public long PlayCount { get; set; }
 

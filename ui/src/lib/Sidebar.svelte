@@ -4,6 +4,7 @@
   import InlineName from './InlineName.svelte'
   import { keymap } from './keymap.svelte'
   import { library } from './library.svelte'
+  import { loudness } from './loudness.svelte'
   import { playlists, type Playlist } from './playlists.svelte'
   import { tags, type Tag } from './tags.svelte'
   import { ui } from './ui.svelte'
@@ -11,6 +12,9 @@
   const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
   const progress = $derived(library.scan.total > 0 ? (library.scan.processed / library.scan.total) * 100 : 0)
   const bpmProgress = $derived(bpm.status.total > 0 ? (bpm.status.done / bpm.status.total) * 100 : 0)
+  const loudnessProgress = $derived(
+    loudness.status.total > 0 ? (loudness.status.done / loudness.status.total) * 100 : 0,
+  )
 
   const isActive = (p: Playlist) => library.playlist?.id === p.id
   const isRenaming = (kind: 'tag' | 'playlist', id: number) => ui.renaming?.kind === kind && ui.renaming.id === id
@@ -220,6 +224,16 @@
       <div class="bar"><div style:width="{bpmProgress}%"></div></div>
     {:else if bpm.status.pending > 0 && !library.scan.running}
       <button class="link" onclick={bpm.start}>Analyze BPM ({bpm.status.pending.toLocaleString()} left)</button>
+    {/if}
+
+    {#if loudness.status.running}
+      <p class="line">
+        <span>Measuring volume… {loudness.status.done.toLocaleString()} / {loudness.status.total.toLocaleString()}</span>
+        <button class="link" onclick={loudness.cancel} title="Stop measuring for now">Stop</button>
+      </p>
+      <div class="bar"><div style:width="{loudnessProgress}%"></div></div>
+    {:else if loudness.status.pending > 0 && !library.scan.running}
+      <button class="link" onclick={loudness.start}>Measure volume ({loudness.status.pending.toLocaleString()} left)</button>
     {/if}
   </div>
 </aside>

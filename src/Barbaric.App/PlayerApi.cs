@@ -36,6 +36,7 @@ public sealed class PlayerApi : IDisposable
     private const string QueuePositionKey = "queuePos";
     internal const string VolumeKey = "volume";
     internal const string LoopTrackKey = "loopTrack";
+    internal const string NormalizeKey = "normalize";
 
     private readonly AudioEngine _engine;
     private readonly PlaybackController _controller;
@@ -61,6 +62,7 @@ public sealed class PlayerApi : IDisposable
         }
 
         _controller.LoopTrack = settings.Get<bool?>(LoopTrackKey) ?? false;
+        _engine.Normalize = settings.Get<bool?>(NormalizeKey) ?? true;
 
         bridge.Query("player.getState", _ => Snapshot());
         bridge.QueryAsync("player.openFile", async _ => await OpenFileAsync());
@@ -85,6 +87,7 @@ public sealed class PlayerApi : IDisposable
         bridge.CommandAsync("player.previous", _ => PreviousAsync());
         bridge.CommandAsync("player.setShuffle", p => SetShuffleAsync(p.GetProperty("on").GetBoolean()));
         bridge.Command("player.setLoop", p => SetLoop(p.GetProperty("on").GetBoolean()));
+        bridge.Command("player.setNormalize", p => SetNormalize(p.GetProperty("on").GetBoolean()));
         bridge.Command("player.seek", p => Seek(TimeSpan.FromSeconds(p.GetProperty("seconds").GetDouble())));
         bridge.CommandAsync("player.setTrackGain", async p =>
         {
@@ -168,6 +171,17 @@ public sealed class PlayerApi : IDisposable
     }
 
     public void ToggleLoop() => SetLoop(!_controller.LoopTrack);
+
+    /// <summary>Evens out the volume between songs. On unless turned off; remembered across sessions.</summary>
+    public void SetNormalize(bool on)
+    {
+        _engine.Normalize = on;
+        _settings.Save(NormalizeKey, on);
+        EmitState();
+    }
+
+    /// <summary>Sends the player state again, e.g. after the loaded song's volume was measured.</summary>
+    public void RefreshState() => EmitState();
 
     public void Seek(TimeSpan position)
     {
@@ -313,6 +327,8 @@ public sealed class PlayerApi : IDisposable
             _engine.Duration.TotalSeconds,
             _engine.Position.TotalSeconds,
             _engine.TrackGainDb,
+            _controller.CurrentTrack is { LoudnessAnalyzed: true } ? _engine.AutoGainDb : null,
+            _engine.Normalize,
             _engine.MasterVolume,
             _controller.HasNext,
             _controller.Queue.HasPrevious,
@@ -330,6 +346,8 @@ public sealed class PlayerApi : IDisposable
         double Duration,
         double Position,
         double TrackGainDb,
+        double? AutoGainDb,
+        bool Normalize,
         float Volume,
         bool HasNext,
         bool HasPrevious,
