@@ -107,6 +107,23 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
 
   A song that wins you back drops off the list by itself.
 
+## Backup
+
+- **Export** (Settings → Backup, or "Export backup…" in the command palette) saves a readable JSON file with:
+  - tags (with their colours) and playlists, in order;
+  - each song's info edits, BPM, volume, plays, skips, last played, hidden flag and play history;
+  - the theme, accent, keyboard shortcuts, global hotkeys, volume and loop setting.
+
+  Music folders, window placement and the queue belong to one PC and are left out.
+- **Import** merges a backup into the library, after showing what it holds:
+  - Songs are matched by content fingerprint, so they're found even after a move or rename, or on another PC.
+  - For songs, tags (matched by name) and playlists (matched by name) that are in both, the backup's version wins. Anything else stays as it is.
+  - A BPM that came from a file's tag is read from the file again rather than taken from the backup.
+- **Missing files:** a song whose file isn't in the library keeps its data and is listed when the import finishes, by file name and the path it had, so you can go and find it. Copy list puts that list on the clipboard.
+  - Such songs also appear under **Missing songs** in the sidebar, which shows where each file was last seen.
+  - Adding the folder that holds the file (or a rescan) brings the song back with its tags, playlists and stats, even if the file was moved or renamed.
+  - Forget (Del) drops a missing song and its data for good.
+
 ## Look and feel
 
 - **Settings** (the gear in the title bar, or Ctrl+,): pick a theme (Ember, Graphite, Midnight, Moss or the light Paper) and an accent colour, and change keyboard shortcuts.

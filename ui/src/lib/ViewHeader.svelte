@@ -2,7 +2,7 @@
   import { keymap } from './keymap.svelte'
   import { library, songs } from './library.svelte'
 
-  const titles = { library: 'All songs', suggested: 'Suggested for removal', hidden: 'Hidden songs' }
+  const titles = { library: 'All songs', suggested: 'Suggested for removal', hidden: 'Hidden songs', missing: 'Missing songs' }
   const title = $derived(
     library.view.kind === 'filter' || library.view.kind === 'manual'
       ? (library.playlist?.name ?? '')
@@ -14,7 +14,7 @@
       : songs(library.total),
   )
   const canShufflePlay = $derived(
-    library.loaded && library.total > 0 && library.view.kind !== 'suggested' && library.view.kind !== 'hidden',
+    library.loaded && library.total > 0 && !['suggested', 'hidden', 'missing'].includes(library.view.kind),
   )
 </script>
 
@@ -61,6 +61,13 @@
     {:else if library.view.kind === 'hidden' && library.total > 0}
       <button class="ghost" onclick={library.unhideSelected} title={keymap.titled('Put the selected songs back in the library', 'selection.hide')}>
         Unhide
+      </button>
+    {:else if library.view.kind === 'missing' && library.total > 0}
+      <button class="ghost" onclick={library.copySelectedPaths} title="Copy where the selected songs' files were last seen">
+        Copy paths
+      </button>
+      <button class="danger" onclick={library.confirmForget} title={keymap.titled('Drop the selected songs and their data from the library', 'selection.delete')}>
+        Forget…
       </button>
     {/if}
   </div>

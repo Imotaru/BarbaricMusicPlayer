@@ -2,8 +2,8 @@
 
 export type SortKey = 'artist' | 'title' | 'album' | 'duration' | 'bpm' | 'added' | 'plays' | 'skips' | 'position'
 
-/** Which part of the library a query looks at: visible songs, the ones suggested for removal, or hidden ones. */
-export type TrackScope = 'library' | 'suggested' | 'hidden'
+/** Which part of the library a query looks at: visible songs, the ones suggested for removal, hidden ones, or missing ones. */
+export type TrackScope = 'library' | 'suggested' | 'hidden' | 'missing'
 
 /** Tag and BPM constraints. Empty lists and nulls mean "no constraint". */
 export interface TrackFilter {

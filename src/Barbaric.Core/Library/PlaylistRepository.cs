@@ -241,7 +241,7 @@ public sealed class PlaylistRepository(LibraryDatabase database)
         }
     }
 
-    private static string CleanName(string name)
+    internal static string CleanName(string name)
     {
         name = name.Trim();
         if (name.Length == 0)

@@ -22,7 +22,7 @@ public sealed class TrackRepository(LibraryDatabase database)
     private const string PendingBpm = "missing = 0 AND hidden = 0 AND bpm IS NULL AND bpm_source IS NULL";
 
     private const string RowColumns =
-        "t.id, t.title, t.artist, t.album, t.duration_ms, t.bpm, t.bpm_source, t.bpm_confidence, t.play_count, t.skip_count, " +
+        "t.id, t.title, t.artist, t.album, t.path, t.duration_ms, t.bpm, t.bpm_source, t.bpm_confidence, t.play_count, t.skip_count, " +
         "(SELECT group_concat(tag_id) FROM track_tags WHERE track_id = t.id) AS tag_id_list";
 
     /// <summary>Returns one page of the list plus the total number of matching tracks.</summary>
@@ -108,6 +108,19 @@ public sealed class TrackRepository(LibraryDatabase database)
             """,
             new { ids = IdList.ToJson(ids), hidden = scope == TrackScope.Hidden })).ToHashSet();
         return ids.Where(kept.Contains).ToList();
+    }
+
+    /// <summary>
+    /// Drops songs whose file is missing, with their tags, playlist entries and history. Songs whose
+    /// file is present are left alone.
+    /// </summary>
+    /// <returns>How many songs were dropped.</returns>
+    public async Task<int> ForgetAsync(IEnumerable<long> ids)
+    {
+        using var connection = database.Open();
+        return await connection.ExecuteAsync(
+            "DELETE FROM tracks WHERE id IN (SELECT value FROM json_each(@ids)) AND missing = 1",
+            new { ids = IdList.ToJson(ids) });
     }
 
     /// <summary>Tracks the background analyzer still has to look at, newest first.</summary>
@@ -337,7 +350,7 @@ public sealed class TrackRepository(LibraryDatabase database)
         return text is null && field == TrackField.Title ? throw new ArgumentException("A song needs a title.") : text;
     }
 
-    private static IReadOnlyList<TrackField> Overridden(string? overrides)
+    internal static IReadOnlyList<TrackField> Overridden(string? overrides)
     {
         if (string.IsNullOrEmpty(overrides))
         {
@@ -383,6 +396,7 @@ public sealed class TrackRepository(LibraryDatabase database)
             {
                 TrackScope.Suggested => $"{Visible} AND t.flagged = 1",
                 TrackScope.Hidden => "t.missing = 0 AND t.hidden = 1",
+                TrackScope.Missing => "t.missing = 1",
                 _ => Visible,
             },
         };

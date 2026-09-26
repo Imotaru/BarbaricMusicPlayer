@@ -31,7 +31,12 @@ class Keymap {
       ?.getLayoutMap()
       .then((map) => (this.layout = map))
       .catch(() => {})
-    if (hasHost) call<GlobalBinding[]>('hotkeys.getGlobal').then((g) => (this.globals = g))
+    this.reloadGlobals()
+  }
+
+  /** Asks the host for the global hotkeys again, e.g. after a backup replaced them. */
+  reloadGlobals = async () => {
+    if (hasHost) this.globals = await call<GlobalBinding[]>('hotkeys.getGlobal')
   }
 
   bindings(id: string): string[] {

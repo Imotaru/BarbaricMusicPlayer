@@ -25,7 +25,7 @@ public partial class MainWindow
 {
     private const string WindowKey = "window";
     private const string BackgroundKey = "background";
-    private const string UiKey = "ui";
+    internal const string UiKey = "ui";
     private const double ResizeGrip = 5;
     private const double CompactWidth = 360;
     private const double CompactHeight = 96;

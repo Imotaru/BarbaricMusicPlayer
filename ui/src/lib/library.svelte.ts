@@ -28,6 +28,8 @@ export interface TrackRow {
   title: string
   artist: string | null
   album: string | null
+  /** Where the file is, or was last seen for a missing song. */
+  path: string
   durationMs: number
   bpm: number | null
   bpmSource: BpmSource | null
@@ -81,7 +83,7 @@ export interface ScanStatus {
 
 /**
  * What the list shows: the whole library, a filter playlist loaded into the controls, a manual
- * playlist, the songs suggested for removal, or the hidden ones.
+ * playlist, the songs suggested for removal, the hidden ones, or the ones whose file is missing.
  */
 export type View =
   | { kind: 'library' }
@@ -89,12 +91,14 @@ export type View =
   | { kind: 'manual'; id: number }
   | { kind: 'suggested' }
   | { kind: 'hidden' }
+  | { kind: 'missing' }
 
-/** How many songs the suggested and hidden views hold, and how many library songs have no tags. */
+/** How many songs the suggested, hidden and missing views hold, and how many library songs have no tags. */
 export interface LibraryCounts {
   suggested: number
   hidden: number
   untagged: number
+  missing: number
 }
 
 interface RecycleResult {
@@ -139,7 +143,7 @@ class Library {
   error = $state<string | null>(null)
   /** Bumped when the list should scroll back to the top (new search, sort, filter or view). */
   scrollResets = $state(0)
-  counts = $state<LibraryCounts>({ suggested: 0, hidden: 0, untagged: 0 })
+  counts = $state<LibraryCounts>({ suggested: 0, hidden: 0, untagged: 0, missing: 0 })
 
   private pages = $state.raw(new Map<number, TrackRow[]>())
   private version = 0
@@ -184,7 +188,8 @@ class Library {
   }
 
   get scope(): TrackScope {
-    return this.view.kind === 'suggested' || this.view.kind === 'hidden' ? this.view.kind : 'library'
+    const kind = this.view.kind
+    return kind === 'suggested' || kind === 'hidden' || kind === 'missing' ? kind : 'library'
   }
 
   get lensActive() {
@@ -261,6 +266,9 @@ class Library {
   openSuggested = () => this.openScope({ kind: 'suggested' }, 'skips', true)
 
   openHidden = () => this.openScope({ kind: 'hidden' }, 'artist', false)
+
+  /** Songs whose file is gone, e.g. from a backup whose files aren't in the library folders yet. */
+  openMissing = () => this.openScope({ kind: 'missing' }, 'title', false)
 
   /** Shows the whole library narrowed to one tag. */
   showTag = (id: number) => this.showFiltered({ ...emptyFilter(), include: [id] })
@@ -503,13 +511,14 @@ class Library {
     const row = this.row(index)
     if (!row) return
     this.cursor = index
-    player.playTrack(row.id, this.context)
+    // A missing song has no file to play.
+    if (this.view.kind !== 'missing') player.playTrack(row.id, this.context)
   }
 
   playSelected = () => this.playIndex(this.cursor)
 
   playShuffled = () => {
-    if (this.total > 0) player.playShuffled(this.context)
+    if (this.total > 0 && this.view.kind !== 'missing') player.playShuffled(this.context)
   }
 
   /** Takes the selected songs out of the manual playlist being shown. */
@@ -617,6 +626,43 @@ class Library {
     })
   }
 
+  /** Asks, then drops the selected missing songs from the library for good. */
+  confirmForget = () => {
+    const ids = this.selectedIds()
+    if (ids.length === 0 || this.view.kind !== 'missing') return
+    const titles = this.titlesOf(ids)
+    ui.openConfirm({
+      title: ids.length === 1 ? 'Forget this song?' : `Forget ${songs(ids.length)}?`,
+      message:
+        ids.length === 1
+          ? 'Its tags, playlist places, plays and skips are removed. If the file turns up later, it comes back as a new song.'
+          : 'Their tags, playlist places, plays and skips are removed. If the files turn up later, they come back as new songs.',
+      items: titles.length < ids.length ? [...titles, `and ${(ids.length - titles.length).toLocaleString()} more`] : titles,
+      confirmLabel: 'Forget',
+      danger: true,
+      action: () =>
+        ui.run(async () => {
+          await call('library.forget', { trackIds: ids })
+          this.setCursor(Math.min(this.cursor, Math.max(this.total - ids.length - 1, 0)))
+          ui.notify(`Forgot ${songs(ids.length)}.`)
+        }),
+    })
+  }
+
+  /** Copies where the selected songs' files are (or were), one per line. */
+  copySelectedPaths = () => {
+    const wanted = new Set(this.selectedIds())
+    const paths: string[] = []
+    for (const rows of this.pages.values()) {
+      for (const row of rows) if (wanted.has(row.id)) paths.push(row.path)
+    }
+    if (paths.length === 0) return
+    ui.run(async () => {
+      await navigator.clipboard.writeText(paths.join('\r\n'))
+      ui.notify(paths.length === 1 ? 'Copied the file path.' : `Copied ${paths.length.toLocaleString()} file paths.`)
+    })
+  }
+
   // ---- Folders ---------------------------------------------------------------------------------
 
   addFolder = async () => {
@@ -642,7 +688,7 @@ class Library {
     this.resetList()
   }
 
-  private openScope(view: { kind: 'suggested' | 'hidden' }, sort: SortKey, desc: boolean) {
+  private openScope(view: { kind: 'suggested' | 'hidden' | 'missing' }, sort: SortKey, desc: boolean) {
     if (this.view.kind === view.kind) return
     if (this.view.kind === 'library') this.librarySort = { sort: this.sort, desc: this.desc }
     this.view = view

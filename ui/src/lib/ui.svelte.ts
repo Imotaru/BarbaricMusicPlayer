@@ -27,7 +27,27 @@ export interface Confirm {
   action: () => void
 }
 
-export type SettingsTab = 'appearance' | 'keyboard'
+export type SettingsTab = 'appearance' | 'keyboard' | 'backup'
+
+/** A song from an imported backup whose file couldn't be found. */
+export interface MissingSong {
+  id: number
+  fileName: string
+  path: string
+  title: string
+  artist: string | null
+  album: string | null
+}
+
+/** What importing a backup did, shown once it's done. */
+export interface ImportReport {
+  matched: number
+  added: number
+  tagsCreated: number
+  playlistsCreated: number
+  playlistsReplaced: number
+  missing: MissingSong[]
+}
 
 const TOAST_MS = 3500
 
@@ -43,6 +63,7 @@ class Ui {
   /** The song info editor popover, acting on a snapshot of the selected track ids. */
   infoEditor = $state<(Point & { trackIds: number[] }) | null>(null)
   confirm = $state<Confirm | null>(null)
+  importReport = $state<ImportReport | null>(null)
   /** The sidebar item showing an inline name editor. */
   renaming = $state<{ kind: 'tag' | 'playlist'; id: number } | null>(null)
   palette = $state(false)
@@ -69,6 +90,7 @@ class Ui {
       this.skipsEditor !== null ||
       this.infoEditor !== null ||
       this.confirm !== null ||
+      this.importReport !== null ||
       this.palette ||
       this.settings !== null
     )
@@ -167,6 +189,13 @@ class Ui {
 
   closeConfirm = () => (this.confirm = null)
 
+  openImportReport(report: ImportReport) {
+    this.closeAll()
+    this.importReport = report
+  }
+
+  closeImportReport = () => (this.importReport = null)
+
   openPalette() {
     this.closeAll()
     this.palette = true
@@ -188,6 +217,7 @@ class Ui {
     this.skipsEditor = null
     this.infoEditor = null
     this.confirm = null
+    this.importReport = null
     this.renaming = null
     this.closeDialogs()
   }

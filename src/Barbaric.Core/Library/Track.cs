@@ -68,6 +68,9 @@ public sealed class TrackRow
 
     public string? Album { get; set; }
 
+    /// <summary>Where the file is, or was last seen for a missing song.</summary>
+    public string Path { get; set; } = "";
+
     public long DurationMs { get; set; }
 
     public double? Bpm { get; set; }
@@ -156,6 +159,9 @@ public enum TrackScope
 
     /// <summary>Songs the user hid from the library.</summary>
     Hidden,
+
+    /// <summary>Songs whose file is gone, kept so their data comes back if the file does.</summary>
+    Missing,
 }
 
 /// <summary>

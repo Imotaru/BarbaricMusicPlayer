@@ -5,6 +5,7 @@
   import { canRun, commandById } from './lib/commands'
   import ConfirmDialog from './lib/ConfirmDialog.svelte'
   import ContextMenu from './lib/ContextMenu.svelte'
+  import ImportReport from './lib/ImportReport.svelte'
   import InfoEditor from './lib/InfoEditor.svelte'
   import { chordOf, hasModifier } from './lib/keys'
   import { keymap } from './lib/keymap.svelte'
@@ -189,6 +190,9 @@
   {#key ui.confirm}
     <ConfirmDialog confirm={ui.confirm} />
   {/key}
+{/if}
+{#if ui.importReport}
+  <ImportReport report={ui.importReport} />
 {/if}
 {#if ui.palette}
   <CommandPalette />

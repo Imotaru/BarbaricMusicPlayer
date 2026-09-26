@@ -102,6 +102,11 @@ public sealed class LibraryApi : IDisposable
             EmitTracksChanged();
         });
         bridge.QueryAsync("library.recycle", async p => await RecycleAsync(p.GetIds()));
+        bridge.CommandAsync("library.forget", async p =>
+        {
+            await _tracks.ForgetAsync(p.GetIds());
+            EmitTracksChanged();
+        });
     }
 
     /// <summary>Raised on the UI thread after each scan pass that completed.</summary>
@@ -196,6 +201,35 @@ public sealed class LibraryApi : IDisposable
     /// <summary>Scans in the background. Requests made while a scan runs are folded into one follow-up scan.</summary>
     public void StartScan() => _ = ScanLoopAsync();
 
+    /// <summary>
+    /// Runs a change to the tracks table while no scan is running, since a scan works from its own
+    /// snapshot of the table. Scans asked for meanwhile run afterwards.
+    /// </summary>
+    public async Task<T> RunExclusiveAsync<T>(Func<Task<T>> action)
+    {
+        await _scanLock.WaitAsync();
+        try
+        {
+            return await action();
+        }
+        finally
+        {
+            _scanLock.Release();
+            if (_rescanRequested)
+            {
+                StartScan();
+            }
+        }
+    }
+
+    /// <summary>Scans (or joins the scan that is running, plus a follow-up) and waits for it to finish.</summary>
+    public async Task ScanAndWaitAsync()
+    {
+        StartScan();
+        await _scanLock.WaitAsync();
+        _scanLock.Release();
+    }
+
     public void Dispose() => _shutdown.Cancel();
 
     private async Task<IReadOnlyList<string>?> AddFoldersAsync()
@@ -248,7 +282,7 @@ public sealed class LibraryApi : IDisposable
     }
 
     /// <summary>Songs left or joined the library, which changes tag and playlist counts too.</summary>
-    private void EmitTracksChanged()
+    public void EmitTracksChanged()
     {
         _bridge.Emit("library.changed");
         _bridge.Emit("tags.changed");

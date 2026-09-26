@@ -63,6 +63,18 @@
           <span class="count">{library.counts.hidden.toLocaleString()}</span>
         </button>
       {/if}
+      {#if library.counts.missing > 0 || library.view.kind === 'missing'}
+        <button
+          class="item"
+          class:active={library.view.kind === 'missing'}
+          onclick={library.openMissing}
+          title="Songs whose file isn't in your music folders any more"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5.5l3 3v10h-8.5z" /><path d="M6.5 7.2a1.6 1.6 0 1 1 2.2 1.5c-.5.2-.7.6-.7 1.1M8 12v.1" /></svg>
+          <span class="name">Missing songs</span>
+          <span class="count">{library.counts.missing.toLocaleString()}</span>
+        </button>
+      {/if}
     </nav>
 
     <section>

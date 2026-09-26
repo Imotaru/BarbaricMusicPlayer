@@ -26,7 +26,7 @@ public sealed class GlobalHotkeys(SettingsStore settings, Action<string> run) : 
     public static readonly string[] Commands =
         [PlayPause, Next, Previous, SeekForward, SeekBack, VolumeUp, VolumeDown, Shuffle, Loop, MiniPlayer, ShowWindow];
 
-    private const string SettingsKey = "globalHotkeys";
+    internal const string SettingsKey = "globalHotkeys";
     private const uint NoRepeat = 0x4000;
 
     private readonly Dictionary<string, string> _bindings =
@@ -98,6 +98,33 @@ public sealed class GlobalHotkeys(SettingsStore settings, Action<string> run) : 
         settings.Save(SettingsKey, _bindings);
         Register(command);
         return _inUse.Contains(command) ? "inUse" : "ok";
+    }
+
+    /// <summary>
+    /// Swaps in a whole set of bindings, e.g. from a backup. Unknown commands, unusable keys and a
+    /// second command on the same keys are dropped.
+    /// </summary>
+    public void ReplaceAll(IReadOnlyDictionary<string, string> bindings)
+    {
+        foreach (var command in Commands)
+        {
+            Unregister(command);
+        }
+
+        _bindings.Clear();
+        foreach (var (command, keys) in bindings)
+        {
+            if (Commands.Contains(command) && HotkeyChord.TryParse(keys) is not null && !_bindings.ContainsValue(keys))
+            {
+                _bindings[command] = keys;
+            }
+        }
+
+        settings.Save(SettingsKey, _bindings);
+        foreach (var command in Commands)
+        {
+            Register(command);
+        }
     }
 
     private void Suspend(bool on)

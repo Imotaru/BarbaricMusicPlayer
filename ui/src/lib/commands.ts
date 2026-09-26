@@ -2,6 +2,7 @@
 // the user's preferences (overrides); see keymap.svelte.ts.
 
 import { openBpmEditor, openInfoEditor, openPlaylistPicker, openSkipsEditor, openTagPicker } from './actions'
+import { exportBackup, importBackup } from './backup'
 import { library } from './library.svelte'
 import { player } from './player.svelte'
 import { ui } from './ui.svelte'
@@ -49,7 +50,7 @@ export const COMMANDS: Command[] = [
     id: 'library.playShuffled',
     label: 'Shuffle play this list',
     group: 'Playback',
-    when: () => listShown() && library.total > 0 && view() !== 'suggested' && view() !== 'hidden',
+    when: () => listShown() && library.total > 0 && !['suggested', 'hidden', 'missing'].includes(view()),
     run: library.playShuffled,
   },
   { id: 'player.openFile', label: 'Open a file…', group: 'Playback', inInputs: true, run: player.openFile },
@@ -65,7 +66,7 @@ export const COMMANDS: Command[] = [
     id: 'selection.hide',
     label: 'Hide / unhide selected songs',
     group: 'Songs',
-    when: hasSelection,
+    when: () => hasSelection() && view() !== 'missing',
     run: () => (view() === 'hidden' ? library.unhideSelected() : library.hideSelected()),
   },
   {
@@ -77,10 +78,15 @@ export const COMMANDS: Command[] = [
   },
   {
     id: 'selection.delete',
-    label: 'Remove from playlist / delete file',
+    label: 'Remove from playlist / delete file / forget missing song',
     group: 'Songs',
-    when: () => hasSelection() && ['manual', 'suggested', 'hidden'].includes(view()),
-    run: () => (view() === 'manual' ? library.removeSelectedFromPlaylist() : library.confirmRecycle()),
+    when: () => hasSelection() && ['manual', 'suggested', 'hidden', 'missing'].includes(view()),
+    run: () =>
+      view() === 'manual'
+        ? library.removeSelectedFromPlaylist()
+        : view() === 'missing'
+          ? library.confirmForget()
+          : library.confirmRecycle(),
   },
   {
     id: 'selection.moveUp',
@@ -103,6 +109,7 @@ export const COMMANDS: Command[] = [
   { id: 'view.library', label: 'Library', group: 'Go to', when: listShown, run: library.openLibrary },
   { id: 'view.suggested', label: 'Suggested for removal', group: 'Go to', when: listShown, run: library.openSuggested },
   { id: 'view.hidden', label: 'Hidden songs', group: 'Go to', when: listShown, run: library.openHidden },
+  { id: 'view.missing', label: 'Missing songs', group: 'Go to', when: listShown, run: library.openMissing },
 
   { id: 'app.palette', label: 'Command palette', group: 'App', inInputs: true, hidden: true, when: listShown, run: () => ui.openPalette() },
   { id: 'app.settings', label: 'Settings…', group: 'App', inInputs: true, when: listShown, run: () => ui.openSettings() },
@@ -110,6 +117,8 @@ export const COMMANDS: Command[] = [
   { id: 'window.show', label: 'Bring the player to the front', group: 'App', global: true, hidden: true, run: () => {} },
   { id: 'library.addFolder', label: 'Add a music folder…', group: 'App', run: library.addFolder },
   { id: 'library.rescan', label: 'Rescan music folders', group: 'App', run: library.rescan },
+  { id: 'backup.export', label: 'Export backup…', group: 'App', run: exportBackup },
+  { id: 'backup.import', label: 'Import backup…', group: 'App', run: importBackup },
 ]
 
 export const commandById = new Map(COMMANDS.map((c) => [c.id, c]))

@@ -59,13 +59,16 @@ class PrefsStore {
     this.saved = JSON.stringify(this.snapshot())
 
     // A reload can run on a startup script older than the last change; the host's copy wins.
-    if (hasHost) {
-      call<unknown>('settings.getUi').then((stored) => {
-        if (stored != null) {
-          this.apply(clean(stored))
-          this.saved = JSON.stringify(this.snapshot())
-        }
-      })
+    this.reload()
+  }
+
+  /** Takes the host's copy, e.g. after a backup was imported. */
+  reload = async () => {
+    if (!hasHost) return
+    const stored = await call<unknown>('settings.getUi')
+    if (stored != null) {
+      this.apply(clean(stored))
+      this.saved = JSON.stringify(this.snapshot())
     }
   }
 

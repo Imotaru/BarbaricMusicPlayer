@@ -52,7 +52,7 @@ public sealed class PlayStatsTests : IAsyncLifetime
         Assert.Empty(await _library.TitlesAsync(new TrackQuery(Scope: TrackScope.Suggested)));
         Assert.True(await _library.Stats.RecordAsync(_ids["B"], 500, 10_000, PlayKind.Skip));
         Assert.Equal(["B"], await _library.TitlesAsync(new TrackQuery(Scope: TrackScope.Suggested)));
-        Assert.Equal(new LibraryCounts(1, 0, 3), await _library.Stats.GetCountsAsync());
+        Assert.Equal(new LibraryCounts(1, 0, 3, 0), await _library.Stats.GetCountsAsync());
 
         await _library.Stats.KeepAsync([_ids["B"]]);
 
@@ -127,7 +127,7 @@ public sealed class PlayStatsTests : IAsyncLifetime
         Assert.Equal(["A"], await _library.TitlesAsync(new TrackQuery(Scope: TrackScope.Hidden)));
         Assert.Equal(1, (await _library.Tags.GetAsync(tag.Id))!.Count);
         Assert.Equal(1, (await _library.Playlists.GetAsync(playlist))!.Count);
-        Assert.Equal(new LibraryCounts(0, 1, 1), await _library.Stats.GetCountsAsync());
+        Assert.Equal(new LibraryCounts(0, 1, 1, 0), await _library.Stats.GetCountsAsync());
 
         await _library.Stats.SetHiddenAsync([_ids["A"]], hidden: false);
         Assert.Equal(3, (await _library.AllRowsAsync()).Count);

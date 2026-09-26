@@ -138,7 +138,7 @@ public sealed partial class TagRepository(LibraryDatabase database)
         return Palette.MinBy(c => used.GetValueOrDefault(c))!;
     }
 
-    private static string CleanName(string name)
+    internal static string CleanName(string name)
     {
         name = name.Trim();
         if (name.Length == 0)
@@ -151,7 +151,9 @@ public sealed partial class TagRepository(LibraryDatabase database)
 
     // The colour ends up in the UI's styles, so only plain hex colours are accepted.
     private static string CleanColor(string color) =>
-        HexColor().IsMatch(color) ? color.ToLowerInvariant() : throw new ArgumentException($"'{color}' is not a #rrggbb colour.");
+        IsColor(color) ? color.ToLowerInvariant() : throw new ArgumentException($"'{color}' is not a #rrggbb colour.");
+
+    internal static bool IsColor(string? color) => color is not null && HexColor().IsMatch(color);
 
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
     private static partial Regex HexColor();

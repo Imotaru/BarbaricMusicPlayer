@@ -19,7 +19,10 @@
     ...(library.view.kind === 'manual' ? [{ key: 'position', label: '#', numeric: true } as Column] : []),
     { key: 'title', label: 'Title' },
     { key: 'artist', label: 'Artist' },
-    { key: 'album', label: 'Album', optional: true },
+    // Missing songs show where their file was last seen, to help find it again.
+    library.view.kind === 'missing'
+      ? { key: null, label: 'Last seen at', optional: true }
+      : { key: 'album', label: 'Album', optional: true },
     { key: null, label: 'Tags', optional: true },
     { key: 'bpm', label: 'BPM', numeric: true, optional: true },
     { key: 'plays', label: 'Plays', numeric: true, optional: true },
@@ -31,6 +34,7 @@
     library: 'Search songs, artists, albums…',
     suggested: 'Search these songs…',
     hidden: 'Search hidden songs…',
+    missing: 'Search missing songs…',
     filter: 'Search this playlist…',
     manual: 'Search this playlist…',
   }
@@ -167,6 +171,9 @@
         {:else if library.view.kind === 'hidden'}
           <p class="big">No hidden songs</p>
           <p>Songs you hide stay on disk but out of your library. Hide one from its right-click menu{#if keymap.label('selection.hide')}&nbsp;or with <kbd>{keymap.label('selection.hide')}</kbd>{/if}.</p>
+        {:else if library.view.kind === 'missing'}
+          <p class="big">No missing songs</p>
+          <p>Songs whose file can't be found wait here, with their tags and playlists, until a scan finds the file again.</p>
         {:else if library.view.kind === 'manual'}
           <p class="big">This playlist is empty</p>
           <p>Select songs anywhere in your library and add them from their right-click menu{#if keymap.label('selection.playlist')}&nbsp;or with <kbd>{keymap.label('selection.playlist')}</kbd>{/if}.</p>
@@ -210,7 +217,11 @@
                 {row.title}
               </span>
               <span class="cell dim">{row.artist ?? ''}</span>
-              <span class="cell dim optional">{row.album ?? ''}</span>
+              {#if library.view.kind === 'missing'}
+                <span class="cell dim optional path" title={row.path}><bdi>{row.path}</bdi></span>
+              {:else}
+                <span class="cell dim optional">{row.album ?? ''}</span>
+              {/if}
               <span class="cell chips optional">
                 {#each tags.resolve(row.tagIds) as tag (tag.id)}
                   <span class="chip" style:--c={tag.color}>{tag.name}</span>
@@ -395,6 +406,12 @@
   .cell.numeric {
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* A long path is cut at its start, so the folder and file name stay visible. */
+  .cell.path {
+    direction: rtl;
+    text-align: left;
   }
 
   .dim {

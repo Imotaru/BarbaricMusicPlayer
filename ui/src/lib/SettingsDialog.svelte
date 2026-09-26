@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { exportBackup, importBackup } from './backup'
   import { commandById, COMMANDS, type Command } from './commands'
   import { chordLabel, chordOf, RESERVED } from './keys'
   import { keymap } from './keymap.svelte'
@@ -9,6 +10,7 @@
   const tabs: { id: SettingsTab; label: string }[] = [
     { id: 'appearance', label: 'Appearance' },
     { id: 'keyboard', label: 'Keyboard' },
+    { id: 'backup', label: 'Backup' },
   ]
 
   /** Accents offered next to the colour picker: every theme's own, so any theme can wear another's. */
@@ -180,6 +182,26 @@
               <button class="link" onclick={() => prefs.setAccent(null)}>Use the theme's accent</button>
             {/if}
           </div>
+        </section>
+      {:else if ui.settings === 'backup'}
+        <section>
+          <h3>Export</h3>
+          <p class="intro">
+            Saves your tags, playlists and every song's info, BPM, volume, plays and skips to a file, along with your
+            theme, shortcuts and volume. Songs are recognised by their content, so the backup still fits after files are
+            moved or renamed, or on another PC.
+          </p>
+          <button class="action" onclick={exportBackup}>Export backup…</button>
+        </section>
+
+        <section>
+          <h3>Import</h3>
+          <p class="intro">
+            Merges a backup into this library. For songs, tags and playlists in both, the backup's version wins; nothing
+            else is removed. Songs whose file can't be found are listed by file name, and come back when a scan finds them
+            in one of your music folders.
+          </p>
+          <button class="action" onclick={importBackup}>Import backup…</button>
         </section>
       {:else}
         <p class="intro">
@@ -572,5 +594,20 @@
 
   .reset-all {
     margin-top: 14px;
+  }
+
+  .action {
+    height: 30px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .action:hover {
+    background: var(--surface-hover);
   }
 </style>

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Interop;
 using Barbaric.App.Bridge;
@@ -171,6 +172,7 @@ public partial class MainWindow : Window
         _ = new TagApi(new TagRepository(_database), _bridge);
         _ = new PlaylistApi(new PlaylistRepository(_database), _bridge);
         _bpm = new BpmApi(new BpmBackgroundAnalyzer(tracks), tracks, _bridge);
+        _ = new BackupApi(new LibraryBackup(_database), _library, _settings, ApplyBackupSettings, _bridge, this);
         _media = MediaControls.TryCreate(new WindowInteropHelper(this).Handle, _player);
         TaskbarButtons.Attach(this, _player);
 
@@ -196,6 +198,34 @@ public partial class MainWindow : Window
         if (openWith is not null)
         {
             await _player.OpenAsync(openWith);
+        }
+    }
+
+    /// <summary>Puts settings from a backup into effect, the same way changing them here would.</summary>
+    private void ApplyBackupSettings(IReadOnlyDictionary<string, JsonElement> settings)
+    {
+        if (settings.TryGetValue(UiKey, out var ui) && ui.ValueKind == JsonValueKind.Object)
+        {
+            _uiPrefs = ui.GetRawText();
+            _settings.SaveRaw(UiKey, _uiPrefs);
+            RefreshInitialScript();
+        }
+
+        if (settings.TryGetValue(PlayerApi.VolumeKey, out var volume) && volume.ValueKind == JsonValueKind.Number)
+        {
+            _player?.SetVolume(Math.Clamp(volume.GetDouble(), 0, 1));
+        }
+
+        if (settings.TryGetValue(PlayerApi.LoopTrackKey, out var loop) && loop.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            _player?.SetLoop(loop.GetBoolean());
+        }
+
+        if (settings.TryGetValue(GlobalHotkeys.SettingsKey, out var hotkeys) && hotkeys.ValueKind == JsonValueKind.Object)
+        {
+            _hotkeys.ReplaceAll(hotkeys.EnumerateObject()
+                .Where(p => p.Value.ValueKind == JsonValueKind.String)
+                .ToDictionary(p => p.Name, p => p.Value.GetString()!));
         }
     }
 

@@ -34,8 +34,8 @@ public sealed class PlayerApi : IDisposable
 
     private const string QueueKey = "queue";
     private const string QueuePositionKey = "queuePos";
-    private const string VolumeKey = "volume";
-    private const string LoopTrackKey = "loopTrack";
+    internal const string VolumeKey = "volume";
+    internal const string LoopTrackKey = "loopTrack";
 
     private readonly AudioEngine _engine;
     private readonly PlaybackController _controller;

@@ -33,6 +33,23 @@ export const openInfoEditor = (at: Point = cursorAnchor()) => ui.openInfoEditor(
 export function openRowMenu(at: Point, index: number) {
   library.contextSelect(index)
   const count = library.selectedCount
+  if (library.view.kind === 'missing') {
+    // Nothing to play or analyze without the file, but its data can still be looked after.
+    ui.openMenu(at, [
+      { label: count > 1 ? 'Copy file paths' : 'Copy file path', action: library.copySelectedPaths },
+      { separator: true },
+      {
+        label: count > 1 ? `Edit info of ${songs(count)}…` : 'Edit info…',
+        shortcut: keymap.label('selection.edit'),
+        action: () => openInfoEditor(at),
+      },
+      { label: count > 1 ? `Tag ${songs(count)}…` : 'Tag…', shortcut: keymap.label('selection.tag'), action: () => openTagPicker(at) },
+      { label: 'Add to playlist…', shortcut: keymap.label('selection.playlist'), action: () => openPlaylistPicker(at) },
+      { separator: true },
+      { label: 'Forget…', shortcut: keymap.label('selection.delete'), danger: true, action: library.confirmForget },
+    ])
+    return
+  }
   const items: MenuItem[] = [
     { label: 'Play', shortcut: 'Enter', action: () => library.playIndex(index) },
     { separator: true },
