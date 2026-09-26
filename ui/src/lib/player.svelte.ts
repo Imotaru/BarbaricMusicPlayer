@@ -92,6 +92,8 @@ class Player {
     this.run(() => call('player.setVolume', { volume: this.volume }))
   }
 
+  changeVolume = (delta: number) => this.setVolume(Math.round((this.volume + delta) * 100) / 100)
+
   private apply(s: PlayerSnapshot) {
     this.state = s.state
     this.trackId = s.trackId

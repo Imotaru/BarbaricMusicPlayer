@@ -1,6 +1,7 @@
 // Menus and pickers shared by the list, the sidebar and the keyboard shortcuts in App.svelte.
 
 import { bpm } from './bpm.svelte'
+import { keymap } from './keymap.svelte'
 import { library, songs } from './library.svelte'
 import { playlists, type Playlist } from './playlists.svelte'
 import { tags, type Tag } from './tags.svelte'
@@ -31,28 +32,28 @@ export function openRowMenu(at: Point, index: number) {
   const items: MenuItem[] = [
     { label: 'Play', shortcut: 'Enter', action: () => library.playIndex(index) },
     { separator: true },
-    { label: count > 1 ? `Tag ${songs(count)}…` : 'Tag…', shortcut: 'T', action: () => openTagPicker(at) },
-    { label: 'Add to playlist…', shortcut: 'P', action: () => openPlaylistPicker(at) },
+    { label: count > 1 ? `Tag ${songs(count)}…` : 'Tag…', shortcut: keymap.label('selection.tag'), action: () => openTagPicker(at) },
+    { label: 'Add to playlist…', shortcut: keymap.label('selection.playlist'), action: () => openPlaylistPicker(at) },
     { separator: true },
-    { label: 'Edit BPM…', shortcut: 'B', action: () => openBpmEditor(at) },
+    { label: 'Edit BPM…', shortcut: keymap.label('selection.bpm'), action: () => openBpmEditor(at) },
     { label: 'Double BPM', action: () => bpm.scaleSelected(2) },
     { label: 'Halve BPM', action: () => bpm.scaleSelected(0.5) },
     { label: count > 1 ? `Analyze BPM of ${songs(count)}` : 'Analyze BPM', action: bpm.analyzeSelected },
   ]
   items.push({ separator: true })
-  const hide: MenuItem = { label: 'Hide from library', shortcut: 'H', action: library.hideSelected }
-  const recycle: MenuItem = { label: 'Delete file…', shortcut: 'Del', danger: true, action: library.confirmRecycle }
+  const hide: MenuItem = { label: 'Hide from library', shortcut: keymap.label('selection.hide'), action: library.hideSelected }
+  const recycle: MenuItem = { label: 'Delete file…', shortcut: keymap.label('selection.delete'), danger: true, action: library.confirmRecycle }
   switch (library.view.kind) {
     case 'suggested':
-      items.push({ label: 'Keep', shortcut: 'K', action: library.keepSelected }, hide, recycle)
+      items.push({ label: 'Keep', shortcut: keymap.label('selection.keep'), action: library.keepSelected }, hide, recycle)
       break
     case 'hidden':
-      items.push({ label: 'Unhide', shortcut: 'H', action: library.unhideSelected }, recycle)
+      items.push({ label: 'Unhide', shortcut: keymap.label('selection.hide'), action: library.unhideSelected }, recycle)
       break
     case 'manual':
       items.push(hide, {
         label: 'Remove from playlist',
-        shortcut: 'Del',
+        shortcut: keymap.label('selection.delete'),
         danger: true,
         action: library.removeSelectedFromPlaylist,
       })

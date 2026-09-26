@@ -68,7 +68,7 @@
     display: grid;
     place-items: center;
     padding: 16px;
-    background: rgb(0 0 0 / 0.4);
+    background: var(--scrim);
   }
 
   .confirm {
@@ -139,6 +139,6 @@
 
   .primary.danger {
     background: var(--danger);
-    color: white;
+    color: var(--on-danger);
   }
 </style>

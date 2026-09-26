@@ -1,4 +1,10 @@
-/** App-wide overlay state: toast messages, the context menu, the popovers, confirmations and inline renames. */
+/**
+ * App-wide overlay state: toast messages, the context menu, the popovers, confirmations, inline
+ * renames, the command palette and the settings, plus whether the window is the mini-player.
+ */
+
+import { call, hasHost, on } from './bridge'
+import { initial } from './prefs.svelte'
 
 export type MenuItem =
   | { label: string; shortcut?: string; danger?: boolean; disabled?: boolean; action: () => void }
@@ -21,6 +27,8 @@ export interface Confirm {
   action: () => void
 }
 
+export type SettingsTab = 'appearance' | 'keyboard'
+
 const TOAST_MS = 3500
 
 class Ui {
@@ -33,11 +41,31 @@ class Ui {
   confirm = $state<Confirm | null>(null)
   /** The sidebar item showing an inline name editor. */
   renaming = $state<{ kind: 'tag' | 'playlist'; id: number } | null>(null)
+  palette = $state(false)
+  settings = $state<SettingsTab | null>(null)
+  /** The window is the small always-on-top mini-player. */
+  compact = $state(initial.compact === true)
 
   private toastTimer: ReturnType<typeof setTimeout> | undefined
 
+  constructor() {
+    if (!hasHost) return
+    call<{ compact: boolean }>('window.getState').then((s) => (this.compact = s.compact))
+    on<{ compact: boolean }>('window.state', (s) => {
+      this.compact = s.compact
+      if (s.compact) this.closeAll()
+    })
+  }
+
   get overlayOpen() {
-    return this.menu !== null || this.picker !== null || this.bpmEditor !== null || this.confirm !== null
+    return (
+      this.menu !== null ||
+      this.picker !== null ||
+      this.bpmEditor !== null ||
+      this.confirm !== null ||
+      this.palette ||
+      this.settings !== null
+    )
   }
 
   notify = (message: string, error = false) => {
@@ -58,6 +86,7 @@ class Ui {
   }
 
   openMenu(at: Point, items: MenuItem[]) {
+    this.closeDialogs()
     this.picker = null
     this.bpmEditor = null
     this.confirm = null
@@ -68,6 +97,7 @@ class Ui {
 
   openPicker(mode: 'tag' | 'playlist', trackIds: number[], at: Point) {
     if (trackIds.length === 0) return
+    this.closeDialogs()
     this.menu = null
     this.bpmEditor = null
     this.confirm = null
@@ -78,6 +108,7 @@ class Ui {
 
   openBpmEditor(trackIds: number[], at: Point) {
     if (trackIds.length === 0) return
+    this.closeDialogs()
     this.menu = null
     this.picker = null
     this.confirm = null
@@ -87,6 +118,7 @@ class Ui {
   closeBpmEditor = () => (this.bpmEditor = null)
 
   openConfirm(confirm: Confirm) {
+    this.closeDialogs()
     this.menu = null
     this.picker = null
     this.bpmEditor = null
@@ -94,6 +126,40 @@ class Ui {
   }
 
   closeConfirm = () => (this.confirm = null)
+
+  openPalette() {
+    this.closeAll()
+    this.palette = true
+  }
+
+  closePalette = () => (this.palette = false)
+
+  openSettings(tab: SettingsTab = 'appearance') {
+    this.closeAll()
+    this.settings = tab
+  }
+
+  closeSettings = () => (this.settings = null)
+
+  closeAll = () => {
+    this.menu = null
+    this.picker = null
+    this.bpmEditor = null
+    this.confirm = null
+    this.renaming = null
+    this.closeDialogs()
+  }
+
+  /** Switches the window to or from the mini-player; the host answers with a window.state event. */
+  setCompact = (on: boolean) => {
+    if (on) this.closeAll()
+    if (hasHost) this.run(() => call('window.setCompact', { on }))
+  }
+
+  private closeDialogs() {
+    this.palette = false
+    this.settings = null
+  }
 }
 
 export const ui = new Ui()

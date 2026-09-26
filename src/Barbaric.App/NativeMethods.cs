@@ -7,6 +7,24 @@ namespace Barbaric.App;
 
 internal static class NativeMethods
 {
+    public const int SwHide = 0;
+    public const int SwShowNormal = 1;
+    public const int SwShowMinimized = 2;
+    public const int SwShowMaximized = 3;
+    public const int SwShowNoActivate = 4;
+    public const int WpfRestoreToMaximized = 2;
+    public const int WmHotkey = 0x0312;
+    public const int ErrorHotkeyAlreadyRegistered = 1409;
+
+    private const uint MonitorDefaultToNull = 0;
+    private const uint MonitorDefaultToNearest = 2;
+    private const uint SwpNoSize = 0x1;
+    private const uint SwpNoMove = 0x2;
+    private const uint SwpNoZOrder = 0x4;
+    private const uint SwpNoActivate = 0x10;
+    private const nint HwndTopmost = -1;
+    private const nint HwndNoTopmost = -2;
+
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwcpRound = 2;
     private const int SmCxFrame = 32;
@@ -63,6 +81,104 @@ internal static class NativeMethods
         return !File.Exists(path);
     }
 
+    public static WindowPlacement? GetPlacement(Window window)
+    {
+        var placement = new WindowPlacement { Length = Marshal.SizeOf<WindowPlacement>() };
+        return GetWindowPlacement(new WindowInteropHelper(window).Handle, ref placement) ? placement : null;
+    }
+
+    public static void SetPlacement(Window window, WindowPlacement placement)
+    {
+        placement.Length = Marshal.SizeOf<WindowPlacement>();
+        placement.Flags = 0;
+        SetWindowPlacement(new WindowInteropHelper(window).Handle, ref placement);
+    }
+
+    public static NativeRect GetBounds(Window window)
+    {
+        GetWindowRect(new WindowInteropHelper(window).Handle, out var rect);
+        return rect;
+    }
+
+    /// <summary>Moves and sizes the window in device pixels, leaving its z-order and activation alone.</summary>
+    public static void SetBounds(Window window, NativeRect rect) =>
+        SetWindowPos(new WindowInteropHelper(window).Handle, 0, rect.Left, rect.Top, rect.Width, rect.Height, SwpNoZOrder | SwpNoActivate);
+
+    /// <summary>The work area (screen minus taskbar) and DPI of the monitor the window is on.</summary>
+    public static (NativeRect WorkArea, uint Dpi) CurrentMonitor(Window window) =>
+        MonitorDetails(MonitorFromWindow(new WindowInteropHelper(window).Handle, MonitorDefaultToNearest));
+
+    /// <summary>The monitor under a point, or null when the point is off every screen.</summary>
+    public static (NativeRect WorkArea, uint Dpi)? MonitorAt(int x, int y)
+    {
+        var monitor = MonitorFromPoint(new NativePoint(x, y), MonitorDefaultToNull);
+        return monitor == 0 ? null : MonitorDetails(monitor);
+    }
+
+    public static bool RegisterHotkey(nint hwnd, int id, uint modifiers, uint key, out int error)
+    {
+        var ok = RegisterHotKey(hwnd, id, modifiers, key);
+        error = ok ? 0 : Marshal.GetLastPInvokeError();
+        return ok;
+    }
+
+    public static void UnregisterHotkey(nint hwnd, int id) => UnregisterHotKey(hwnd, id);
+
+    /// <summary>
+    /// Puts the window in the always-on-top band. HWND_TOPMOST alone is silently ignored for a window
+    /// that was started in the background and never activated; stepping out of the band first works.
+    /// </summary>
+    public static void KeepOnTop(Window window)
+    {
+        var hwnd = new WindowInteropHelper(window).Handle;
+        SetWindowPos(hwnd, HwndNoTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+        SetWindowPos(hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+    }
+
+    private static (NativeRect WorkArea, uint Dpi) MonitorDetails(nint monitor)
+    {
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        GetMonitorInfo(monitor, ref info);
+        return GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 ? (info.Work, dpi) : (info.Work, 96u);
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowPlacement(nint hwnd, ref WindowPlacement placement);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPlacement(nint hwnd, ref WindowPlacement placement);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(nint hwnd, out NativeRect rect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int width, int height, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromPoint(NativePoint point, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(nint monitor, int type, out uint dpiX, out uint dpiY);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RegisterHotKey(nint hwnd, int id, uint modifiers, uint key);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnregisterHotKey(nint hwnd, int id);
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHFileOperationW")]
     private static extern int SHFileOperation(ref ShFileOpStruct operation);
 
@@ -88,4 +204,44 @@ internal static class NativeMethods
         public nint NameMappings;
         public string? ProgressTitle;
     }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativePoint(int x, int y)
+{
+    public int X = x;
+    public int Y = y;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeRect(int left, int top, int right, int bottom)
+{
+    public int Left = left;
+    public int Top = top;
+    public int Right = right;
+    public int Bottom = bottom;
+
+    public readonly int Width => Right - Left;
+
+    public readonly int Height => Bottom - Top;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct WindowPlacement
+{
+    public int Length;
+    public int Flags;
+    public int ShowCmd;
+    public NativePoint MinPosition;
+    public NativePoint MaxPosition;
+    public NativeRect NormalPosition;
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+internal struct MonitorInfo
+{
+    public int Size;
+    public NativeRect Monitor;
+    public NativeRect Work;
+    public uint Flags;
 }

@@ -1,7 +1,8 @@
+using System.ComponentModel;
 using System.IO;
 using System.Net.Http;
 using System.Windows;
-using System.Windows.Media;
+using System.Windows.Interop;
 using Barbaric.App.Bridge;
 using Barbaric.Core.Analysis;
 using Barbaric.Core.Audio;
@@ -14,28 +15,60 @@ namespace Barbaric.App;
 public partial class MainWindow : Window
 {
     private const string VirtualHost = "barbaric.example";
-    private const double ResizeGrip = 5;
 
     private readonly AudioEngine _engine = new();
+    private readonly LibraryDatabase _database;
+    private readonly SettingsStore _settings;
+    private readonly GlobalHotkeys _hotkeys;
     private WebBridge? _bridge;
     private PlaybackController? _controller;
     private PlayerApi? _player;
     private LibraryApi? _library;
     private BpmApi? _bpm;
+    private MediaControls? _media;
 
     public MainWindow()
     {
         InitializeComponent();
-        UpdateFrameInset();
 
-        SourceInitialized += (_, _) => NativeMethods.UseRoundedCorners(this);
+        // BARBARIC_LIBRARY_DB points development and test runs at a throwaway library (and its settings).
+        try
+        {
+            _database = new LibraryDatabase(DatabasePath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"The music library could not be opened.\n\n{ex.Message}", "Barbaric Music Player");
+            Environment.Exit(1);
+            throw;
+        }
+
+        _settings = new SettingsStore(new SettingsRepository(_database));
+        _settings.WriteFailed += (_, ex) => _bridge?.Emit("library.error", new { message = $"Couldn't save settings: {ex.Message}" });
+        _hotkeys = new GlobalHotkeys(_settings, RunHotkey);
+        LoadFrameSettings();
+
+        SourceInitialized += (_, _) =>
+        {
+            NativeMethods.UseRoundedCorners(this);
+            RestorePlacement();
+            UpdateFrameInset();
+            _hotkeys.Attach(new WindowInteropHelper(this).Handle);
+        };
 
         // The WebView is the whole UI; route keyboard focus into it so shortcuts work without a click.
         Activated += (_, _) => WebView.Focus();
         StateChanged += (_, _) =>
         {
+            // Win+Up and the like: the mini-player doesn't maximize.
+            if (_compact && WindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Normal;
+                return;
+            }
+
             UpdateFrameInset();
-            _bridge?.Emit("window.state", WindowSnapshot());
+            EmitWindowState();
 
             // Music keeps playing in the host, so the UI can shed memory while minimized.
             if (WebView.CoreWebView2 is { } core)
@@ -46,8 +79,11 @@ public partial class MainWindow : Window
             }
         };
         Loaded += async (_, _) => await InitializeWebViewAsync();
+        Closing += OnClosing;
         Closed += (_, _) =>
         {
+            _hotkeys.Dispose();
+            _media?.Dispose();
             _bpm?.Dispose();
             _library?.Dispose();
             _player?.Dispose();
@@ -63,14 +99,27 @@ public partial class MainWindow : Window
         };
     }
 
+    private static string DatabasePath =>
+        Environment.GetEnvironmentVariable("BARBARIC_LIBRARY_DB") ?? LibraryDatabase.DefaultPath;
+
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        // Read while the window still has its placement; written before the process goes away.
+        SaveFrameSettings();
+        _player?.SaveQueue();
+        _settings.Flush();
+    }
+
     private async Task InitializeWebViewAsync()
     {
         try
         {
-            var dataDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "BarbaricMusicPlayer",
-                "WebView2");
+            // A scratch library also gets its own browser profile, so test runs never touch the real one.
+            var dataDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(DatabasePath))!, "WebView2");
+
+            // Until the page paints, the browser shows its default background; set that way (the only
+            // way that also covers the first frames), it's the theme's rather than a dark or white flash.
+            Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "FF" + _background.TrimStart('#'));
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: dataDir);
             await WebView.EnsureCoreWebView2Async(environment);
         }
@@ -83,6 +132,7 @@ public partial class MainWindow : Window
 
         var core = WebView.CoreWebView2;
         ConfigureSettings(core.Settings);
+        ApplyColorScheme();
 
         var startUri = await ResolveStartUriAsync(core);
         if (startUri is null)
@@ -108,36 +158,80 @@ public partial class MainWindow : Window
         };
         core.NewWindowRequested += (_, e) => e.Handled = true;
 
-        // BARBARIC_LIBRARY_DB points development and test runs at a throwaway library.
-        var database = new LibraryDatabase(
-            Environment.GetEnvironmentVariable("BARBARIC_LIBRARY_DB") ?? LibraryDatabase.DefaultPath);
-        var tracks = new TrackRepository(database);
-        var stats = new PlayStatsRepository(database);
+        var tracks = new TrackRepository(_database);
+        var stats = new PlayStatsRepository(_database);
         _controller = new PlaybackController(_engine, tracks, stats, SynchronizationContext.Current);
 
         _bridge = new WebBridge(core, Dispatcher, origin);
         RegisterWindowApi(_bridge);
-        _player = new PlayerApi(_engine, _controller, _bridge, this);
+        _hotkeys.RegisterApi(_bridge);
+        _player = new PlayerApi(_engine, _controller, _bridge, _settings, this);
         _library = new LibraryApi(
-            new FolderRepository(database), tracks, stats, _controller, new LibraryScanner(database), _bridge, this);
-        _ = new TagApi(new TagRepository(database), _bridge);
-        _ = new PlaylistApi(new PlaylistRepository(database), _bridge);
+            new FolderRepository(_database), tracks, stats, _controller, new LibraryScanner(_database), _bridge, this);
+        _ = new TagApi(new TagRepository(_database), _bridge);
+        _ = new PlaylistApi(new PlaylistRepository(_database), _bridge);
         _bpm = new BpmApi(new BpmBackgroundAnalyzer(tracks), tracks, _bridge);
+        _media = MediaControls.TryCreate(new WindowInteropHelper(this).Handle, _player);
+        TaskbarButtons.Attach(this, _player);
 
         // Analysis waits for the startup scan, and each rescan hands it the songs it found.
         _library.ScanCompleted += (_, _) => _bpm.StartBackground();
 
+        // "Open with": a file path on the command line starts playing immediately; otherwise the
+        // last queue comes back, paused. Either happens before the page asks for the player state.
+        var args = Environment.GetCommandLineArgs();
+        var openWith = args.Length > 1 && File.Exists(args[1]) ? args[1] : null;
+        if (openWith is null)
+        {
+            await _player.RestoreQueueAsync();
+        }
+
+        _initialScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(InitialScript());
         core.Navigate(startUri.ToString());
         WebView.Focus();
 
         // Pick up files added, moved or deleted while the app was closed.
         _library.StartScan();
 
-        // "Open with": a file path on the command line starts playing immediately.
-        var args = Environment.GetCommandLineArgs();
-        if (args.Length > 1 && File.Exists(args[1]))
+        if (openWith is not null)
         {
-            await _player.OpenAsync(args[1]);
+            await _player.OpenAsync(openWith);
+        }
+    }
+
+    /// <summary>What a global hotkey does. Hotkeys can fire before the UI is up; the player ones wait for it.</summary>
+    private void RunHotkey(string command)
+    {
+        switch (command)
+        {
+            case GlobalHotkeys.ShowWindow:
+                if (WindowState == WindowState.Minimized)
+                {
+                    SystemCommands.RestoreWindow(this);
+                }
+
+                Activate();
+                return;
+            case GlobalHotkeys.MiniPlayer:
+                SetCompact(!_compact);
+                return;
+        }
+
+        if (_player is not { } player)
+        {
+            return;
+        }
+
+        switch (command)
+        {
+            case GlobalHotkeys.PlayPause: player.Run(player.TogglePlayPauseAsync); break;
+            case GlobalHotkeys.Next: player.Run(player.NextAsync); break;
+            case GlobalHotkeys.Previous: player.Run(player.PreviousAsync); break;
+            case GlobalHotkeys.Shuffle: player.Run(player.ToggleShuffleAsync); break;
+            case GlobalHotkeys.SeekForward: player.SeekBy(5); break;
+            case GlobalHotkeys.SeekBack: player.SeekBy(-5); break;
+            case GlobalHotkeys.VolumeUp: player.ChangeVolume(0.05); break;
+            case GlobalHotkeys.VolumeDown: player.ChangeVolume(-0.05); break;
         }
     }
 
@@ -199,28 +293,4 @@ public partial class MainWindow : Window
             return false;
         }
     }
-
-    private void RegisterWindowApi(WebBridge bridge)
-    {
-        bridge.Query("window.getState", _ => WindowSnapshot());
-        bridge.Command("window.minimize", _ => WindowState = WindowState.Minimized);
-        bridge.Command("window.toggleMaximize", _ =>
-            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized);
-        bridge.Command("window.close", _ => Close());
-
-        // Keeps the native resize border the same color as the UI theme.
-        bridge.Command("window.setBackground", p =>
-        {
-            var color = (Color)ColorConverter.ConvertFromString(p.GetProperty("color").GetString()!);
-            Background = new SolidColorBrush(color);
-            WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(color.A, color.R, color.G, color.B);
-        });
-    }
-
-    private object WindowSnapshot() => new { maximized = WindowState == WindowState.Maximized };
-
-    private void UpdateFrameInset() =>
-        WebView.Margin = WindowState == WindowState.Maximized
-            ? NativeMethods.MaximizedOverhang(this)
-            : new Thickness(ResizeGrip);
 }

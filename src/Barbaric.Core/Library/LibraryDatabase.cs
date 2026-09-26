@@ -115,6 +115,12 @@ public sealed class LibraryDatabase
 
         CREATE INDEX ix_play_events_track ON play_events (track_id, at_utc);
         """,
+        """
+        CREATE TABLE settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        ) WITHOUT ROWID;
+        """,
     ];
 
     private readonly string _connectionString;

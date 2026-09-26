@@ -23,7 +23,7 @@
   }
 
   .toast.error {
-    color: #ff9592;
+    color: var(--danger-text);
     border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
   }
 

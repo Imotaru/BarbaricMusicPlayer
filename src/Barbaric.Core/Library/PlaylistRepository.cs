@@ -1,6 +1,5 @@
 using System.Data;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -22,12 +21,6 @@ public sealed class PlaylistRepository(LibraryDatabase database)
     public const string FilterKind = "filter";
     public const string ManualKind = "manual";
     public const int MaxNameLength = 100;
-
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     public async Task<IReadOnlyList<PlaylistInfo>> GetAllAsync()
     {
@@ -158,7 +151,7 @@ public sealed class PlaylistRepository(LibraryDatabase database)
     internal static string SerializeQuery(TrackQuery query) =>
         JsonSerializer.Serialize(
             query with { PlaylistId = null, Bpm = null, Scope = TrackScope.Library, Filter = query.Filter is { IsEmpty: false } ? query.Filter : null },
-            JsonOptions);
+            CoreJson.Options);
 
     /// <summary>Reads a saved view. A damaged one comes back as the plain library view rather than failing.</summary>
     internal static TrackQuery? DeserializeQuery(string? json)
@@ -170,7 +163,7 @@ public sealed class PlaylistRepository(LibraryDatabase database)
 
         try
         {
-            return JsonSerializer.Deserialize<TrackQuery>(json, JsonOptions) ?? new TrackQuery();
+            return JsonSerializer.Deserialize<TrackQuery>(json, CoreJson.Options) ?? new TrackQuery();
         }
         catch (JsonException)
         {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keymap } from './keymap.svelte'
   import { library, songs } from './library.svelte'
 
   const titles = { library: 'All songs', suggested: 'Suggested for removal', hidden: 'Hidden songs' }
@@ -40,17 +41,17 @@
         Save as playlist
       </button>
     {:else if library.view.kind === 'suggested' && library.total > 0}
-      <button class="ghost" onclick={library.keepSelected} title="Start the selected songs' play and skip counts over (K)">
+      <button class="ghost" onclick={library.keepSelected} title={keymap.titled("Start the selected songs' play and skip counts over", 'selection.keep')}>
         Keep
       </button>
-      <button class="ghost" onclick={library.hideSelected} title="Take the selected songs out of the library, but leave the files alone (H)">
+      <button class="ghost" onclick={library.hideSelected} title={keymap.titled('Take the selected songs out of the library, but leave the files alone', 'selection.hide')}>
         Hide
       </button>
-      <button class="danger" onclick={library.confirmRecycle} title="Move the selected songs' files to the Recycle Bin (Del)">
+      <button class="danger" onclick={library.confirmRecycle} title={keymap.titled("Move the selected songs' files to the Recycle Bin", 'selection.delete')}>
         Delete…
       </button>
     {:else if library.view.kind === 'hidden' && library.total > 0}
-      <button class="ghost" onclick={library.unhideSelected} title="Put the selected songs back in the library (H)">
+      <button class="ghost" onclick={library.unhideSelected} title={keymap.titled('Put the selected songs back in the library', 'selection.hide')}>
         Unhide
       </button>
     {/if}

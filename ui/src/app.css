@@ -1,4 +1,4 @@
-﻿/* Theme tokens: swap these to reskin the whole app. --bg is also pushed to the native window border. */
+﻿/* Theme tokens (the Ember preset). lib/themes.ts overrides them per theme; --bg is also pushed to the native window border. */
 :root {
   --bg: #121214;
   --surface: #1b1b1f;
@@ -10,8 +10,13 @@
   --accent-contrast: #140a07;
   --track: #34343c;
   --danger: #e5484d;
+  --danger-text: #ff9592;
+  --on-danger: #ffffff;
   --popover: #202026;
   --shadow: 0 12px 32px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.3);
+  --scrim: rgb(0 0 0 / 0.4);
+  --chip-mix: white;
+  --sidebar-width: 230px;
   --titlebar-height: 36px;
 
   color-scheme: dark;

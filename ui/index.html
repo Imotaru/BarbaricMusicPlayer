@@ -5,6 +5,14 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Barbaric Music Player</title>
+    <script>
+      // Paint the saved theme's background before the app loads, so a light theme doesn't flash dark.
+      // The host sets __barbaricInitial before this page runs (see MainWindow.Frame.cs).
+      ;(function () {
+        var background = window.__barbaricInitial && window.__barbaricInitial.background
+        if (/^#[0-9a-f]{6}$/i.test(background || '')) document.documentElement.style.background = background
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -57,6 +57,9 @@ public sealed class PlaybackController : IDisposable
     /// <summary>Raised after a song was left and its play or skip was saved.</summary>
     public event EventHandler<ListenRecord>? ListenRecorded;
 
+    /// <summary>Raised when playing a song taught us something about it, e.g. a length its tags didn't have.</summary>
+    public event EventHandler<Track>? TrackUpdated;
+
     public PlayQueue Queue { get; } = new();
 
     /// <summary>The library track that is loaded, or null for a file played from outside the library.</summary>
@@ -180,6 +183,80 @@ public sealed class PlaybackController : IDisposable
         }
     }
 
+    /// <summary>The queue to save, or null when nothing from the library is loaded.</summary>
+    public QueueSnapshot? Snapshot() =>
+        CurrentTrack is null || Queue.Count == 0 ? null : new QueueSnapshot([.. Queue.Ids], _queueSource, Shuffle);
+
+    /// <summary>Where playback is in the queue, or null when nothing from the library is loaded.</summary>
+    public QueuePosition? Position() =>
+        CurrentTrack is { } track && Queue.Current == track.Id
+            ? new QueuePosition(track.Id, Queue.Index, _engine.Position.TotalSeconds)
+            : null;
+
+    /// <summary>
+    /// Brings back a saved queue, loaded and paused where it was left. Songs that have since gone
+    /// missing or been hidden are dropped; if the current one is among them, the next one that is
+    /// left takes its place, from the start. Nothing is reported for them: the user didn't ask to
+    /// play anything yet.
+    /// </summary>
+    /// <returns>False when nothing in the saved queue can be played any more.</returns>
+    public async Task<bool> RestoreAsync(QueueSnapshot snapshot, QueuePosition position)
+    {
+        // The UI starts every session with an open BPM lens, so the queue must not keep a narrower one.
+        var source = snapshot.Source is null ? null : snapshot.Source with { Bpm = null };
+        var ids = (await _tracks.KeepPlayableAsync(snapshot.Ids, source?.Scope ?? TrackScope.Library)).ToList();
+        if (ids.Count == 0)
+        {
+            return false;
+        }
+
+        var index = ids.IndexOf(position.CurrentId);
+        var seek = TimeSpan.FromSeconds(Math.Max(0, position.PositionSeconds));
+        if (index < 0)
+        {
+            var survivors = ids.ToHashSet();
+            index = Math.Min(snapshot.Ids.Take(Math.Max(0, position.Index)).Count(survivors.Contains), ids.Count - 1);
+            seek = TimeSpan.Zero;
+        }
+
+        _queueSource = source;
+        Shuffle = snapshot.Shuffle;
+        Queue.Set(ids, index);
+
+        for (var attempt = 0; attempt < Queue.Count; attempt++)
+        {
+            if (Queue.Current is not { } id)
+            {
+                break;
+            }
+
+            if (await _tracks.GetAsync(id) is { } track && TryLoad(track, reportErrors: false))
+            {
+                if (track.Id == position.CurrentId && seek > TimeSpan.Zero && seek < _engine.Duration)
+                {
+                    _engine.Seek(seek);
+                }
+
+                // The saved ids were narrowed by that lens; without it, the rest of the list belongs back in.
+                if (snapshot.Source?.Bpm is { IsOpen: false })
+                {
+                    await RebuildQueueAsync(played: Shuffle ? [.. Queue.Ids.Take(Queue.Index)] : []);
+                }
+
+                return true;
+            }
+
+            if (!Queue.MoveNext())
+            {
+                break;
+            }
+        }
+
+        Queue.Clear();
+        _queueSource = null;
+        return false;
+    }
+
     public async Task SetTrackGainAsync(double gainDb)
     {
         _engine.TrackGainDb = gainDb;
@@ -267,11 +344,15 @@ public sealed class PlaybackController : IDisposable
         }
     }
 
-    private bool TryLoad(Track track)
+    private bool TryLoad(Track track, bool reportErrors = true)
     {
         if (track.Missing || !File.Exists(track.Path))
         {
-            Error?.Invoke(this, $"Skipped \"{track.Title}\": the file is missing.");
+            if (reportErrors)
+            {
+                Error?.Invoke(this, $"Skipped \"{track.Title}\": the file is missing.");
+            }
+
             return false;
         }
 
@@ -281,13 +362,38 @@ public sealed class PlaybackController : IDisposable
         try
         {
             _engine.Load(track.Path, track.GainDb);
-            return true;
         }
         catch (Exception ex)
         {
             CurrentTrack = previous;
-            Error?.Invoke(this, $"Skipped \"{track.Title}\": {ex.Message}");
+            if (reportErrors)
+            {
+                Error?.Invoke(this, $"Skipped \"{track.Title}\": {ex.Message}");
+            }
+
             return false;
+        }
+
+        if (track.DurationMs <= 0 && _engine.Duration > TimeSpan.Zero)
+        {
+            track.DurationMs = (long)_engine.Duration.TotalMilliseconds;
+            _ = SaveDurationAsync(track);
+        }
+
+        return true;
+    }
+
+    /// <summary>Stores a length the decoder found for a file whose tags had none.</summary>
+    private async Task SaveDurationAsync(Track track)
+    {
+        try
+        {
+            await _tracks.SetDurationAsync(track.Id, track.DurationMs);
+            TrackUpdated?.Invoke(this, track);
+        }
+        catch (Exception ex)
+        {
+            Error?.Invoke(this, $"Couldn't save the length of \"{track.Title}\": {ex.Message}");
         }
     }
 

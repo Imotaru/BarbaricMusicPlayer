@@ -82,7 +82,7 @@
     height: 24px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--c) 22%, transparent);
-    color: color-mix(in srgb, var(--c) 75%, white);
+    color: color-mix(in srgb, var(--c) 75%, var(--chip-mix));
     font-size: 12px;
     font-weight: 600;
   }

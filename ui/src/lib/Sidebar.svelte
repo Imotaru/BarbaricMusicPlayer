@@ -2,6 +2,7 @@
   import { openPlaylistMenu, openTagMenu, pointOf } from './actions'
   import { bpm } from './bpm.svelte'
   import InlineName from './InlineName.svelte'
+  import { keymap } from './keymap.svelte'
   import { library } from './library.svelte'
   import { playlists, type Playlist } from './playlists.svelte'
   import { tags, type Tag } from './tags.svelte'
@@ -105,7 +106,7 @@
             {/if}
           </li>
         {:else}
-          <li class="hint">Save a search as a playlist, or select songs and press <kbd>P</kbd>.</li>
+          <li class="hint">Save a search as a playlist, or select songs and {#if keymap.label('selection.playlist')}press <kbd>{keymap.label('selection.playlist')}</kbd>{:else}right-click them{/if}.</li>
         {/each}
       </ul>
     </section>
@@ -149,7 +150,7 @@
             {/if}
           </li>
         {:else}
-          <li class="hint">Select songs and press <kbd>T</kbd> to tag them.</li>
+          <li class="hint">Select songs and {#if keymap.label('selection.tag')}press <kbd>{keymap.label('selection.tag')}</kbd>{:else}right-click them{/if} to tag them.</li>
         {/each}
       </ul>
     </section>

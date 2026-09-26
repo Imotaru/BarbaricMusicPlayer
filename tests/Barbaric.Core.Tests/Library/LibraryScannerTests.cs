@@ -55,6 +55,21 @@ public sealed class LibraryScannerTests : IDisposable
     }
 
     [Fact]
+    public async Task UnreadableLength_KeepsTheKnownOne()
+    {
+        var path = _library.AddSong("a.wav", title: "Song", seconds: 2);
+        await _library.AddMusicFolderAndScanAsync();
+        var id = Assert.Single(await _library.AllRowsAsync()).Id;
+
+        // TagLib can't make anything of this, so the rescan reads a length of 0.
+        await File.WriteAllBytesAsync(path, new byte[4096]);
+        var result = await _library.Scanner.ScanAsync();
+
+        Assert.Equal(1, result.Updated);
+        Assert.InRange((await _library.Tracks.GetAsync(id))!.DurationMs, 1980, 2020);
+    }
+
+    [Fact]
     public async Task MovedAndRenamedFile_KeepsItsIdAndVolume()
     {
         var path = _library.AddSong("a.wav", title: "Keeper");

@@ -99,6 +99,18 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
 
   A song that wins you back drops off the list by itself.
 
+## Look and feel
+
+- **Settings** (the gear in the title bar, or Ctrl+,): pick a theme (Ember, Graphite, Midnight, Moss or the light Paper) and an accent colour, and change keyboard shortcuts.
+- **Remembered between sessions:** the theme, window size and position (including maximized), master volume, sidebar width, and the queue. The last song comes back paused where you left it, with the list it was playing from and shuffle.
+- **Sidebar:** drag its edge to resize it. Double-click the edge to reset it.
+- **Mini player** (Ctrl+M, or the button in the title bar): shrinks the window to a small always-on-top player. It remembers where you put it.
+- **Command palette** (Ctrl+K): run any command, or jump to a playlist or tag, by typing part of its name.
+- **Shortcuts:** every command's keys can be changed under Settings → Keyboard. Playback commands, the mini player and "bring to front" can also get a **global** hotkey that works while another app is in front. Global hotkeys start empty and must use Ctrl+Alt, Ctrl+Shift or Win, or F13–F24.
+- **Windows integration:** the media keys, the volume flyout and the lock screen show and control what's playing (with the song's cover art). The taskbar thumbnail has previous, play/pause and next buttons.
+
+Settings live in the library database, so `BARBARIC_LIBRARY_DB` gives a test run its own settings (and its own WebView2 profile) too.
+
 ## Tests
 
 ```bash
@@ -115,11 +127,14 @@ Release builds run `npm run build` automatically and copy `ui/dist` into `wwwroo
 
 ## Keyboard
 
+These are the defaults; change them under Settings → Keyboard. The list keys (arrows, PgUp/PgDn, Home/End, Enter, Esc, Ctrl+A) can't be changed.
+
 | Key | Action |
 |---|---|
 | Space | Play / pause |
 | ← / → | Seek back / forward 5 s (with Shift: 30 s) |
 | Ctrl+← / Ctrl+→ | Previous / next song |
+| Ctrl+↑ / Ctrl+↓ | Volume up / down |
 | ↑ / ↓, PgUp / PgDn, Home / End | Move in the list (with Shift: extend the selection) |
 | Ctrl+A | Select every song in the list |
 | Enter | Play the selected song |
@@ -134,3 +149,6 @@ Release builds run `npm run build` automatically and copy `ui/dist` into `wwwroo
 | Esc | Clear the selection, then the filter (the BPM range slider stays; reset it with its ×) |
 | Ctrl+F or / | Search (↑/↓ and Enter work from the search box; Esc clears it) |
 | Ctrl+O | Open a file |
+| Ctrl+K | Command palette |
+| Ctrl+, | Settings |
+| Ctrl+M | Mini player on / off |

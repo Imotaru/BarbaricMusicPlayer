@@ -19,8 +19,12 @@ public sealed class PlayQueue
 
     public bool HasPrevious => _index > 0 && _ids.Count > 0;
 
+    /// <summary>Goes up whenever the list of ids changes (not when the cursor moves), so it can be saved only then.</summary>
+    public int Version { get; private set; }
+
     public void Set(IEnumerable<long> ids, int startIndex)
     {
+        Version++;
         _ids = [.. ids];
         _index = _ids.Count == 0 ? -1 : Math.Clamp(startIndex, 0, _ids.Count - 1);
     }
@@ -36,6 +40,7 @@ public sealed class PlayQueue
             removed.Remove(current);
         }
 
+        Version++;
         var before = _ids.Take(Math.Max(_index, 0)).Count(removed.Contains);
         _ids.RemoveAll(removed.Contains);
         _index = _ids.Count == 0 ? -1 : Math.Clamp(_index - before, 0, _ids.Count - 1);

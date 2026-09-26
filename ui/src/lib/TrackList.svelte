@@ -4,6 +4,7 @@
   import BpmRange from './BpmRange.svelte'
   import FilterBar from './FilterBar.svelte'
   import { library, type SortKey } from './library.svelte'
+  import { keymap } from './keymap.svelte'
   import { formatTime, player } from './player.svelte'
   import { formatRange } from './query'
   import { tags } from './tags.svelte'
@@ -104,7 +105,7 @@
         oninput={(e) => library.setText(e.currentTarget.value)}
         onkeydown={onSearchKeydown}
       />
-      <kbd>Ctrl F</kbd>
+      {#if keymap.label('library.search')}<kbd>{keymap.label('library.search')}</kbd>{/if}
     </div>
     <BpmRange />
   </div>
@@ -165,10 +166,10 @@
           <p>Songs you skip most of the time show up here, so you can decide whether to keep them.</p>
         {:else if library.view.kind === 'hidden'}
           <p class="big">No hidden songs</p>
-          <p>Songs you hide stay on disk but out of your library. Hide one with <kbd>H</kbd>.</p>
+          <p>Songs you hide stay on disk but out of your library. Hide one from its right-click menu{#if keymap.label('selection.hide')}&nbsp;or with <kbd>{keymap.label('selection.hide')}</kbd>{/if}.</p>
         {:else if library.view.kind === 'manual'}
           <p class="big">This playlist is empty</p>
-          <p>Select songs anywhere in your library and press <kbd>P</kbd> to add them.</p>
+          <p>Select songs anywhere in your library and add them from their right-click menu{#if keymap.label('selection.playlist')}&nbsp;or with <kbd>{keymap.label('selection.playlist')}</kbd>{/if}.</p>
         {:else if library.scan.running}
           <p class="big">Scanning…</p>
         {:else}
@@ -428,7 +429,7 @@
     padding: 1px 7px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--c) 22%, transparent);
-    color: color-mix(in srgb, var(--c) 75%, white);
+    color: color-mix(in srgb, var(--c) 75%, var(--chip-mix));
     font-size: 11px;
     font-weight: 600;
     line-height: 16px;

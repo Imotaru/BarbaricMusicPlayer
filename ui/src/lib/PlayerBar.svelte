@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keymap } from './keymap.svelte'
   import { library } from './library.svelte'
   import { GAIN_MAX_DB, GAIN_MIN_DB, formatGain, formatTime, player } from './player.svelte'
 
@@ -32,8 +33,8 @@
         class:on={player.shuffle}
         onclick={player.toggleShuffle}
         aria-pressed={player.shuffle}
-        aria-label="Shuffle (S)"
-        title={player.shuffle ? 'Shuffle is on: songs you often skip come up less (S)' : 'Shuffle (S)'}
+        aria-label={keymap.titled('Shuffle', 'player.shuffle')}
+        title={keymap.titled(player.shuffle ? 'Shuffle is on: songs you often skip come up less' : 'Shuffle', 'player.shuffle')}
       >
         <svg viewBox="0 0 24 24">
           <path
@@ -41,14 +42,14 @@
           />
         </svg>
       </button>
-      <button class="icon" onclick={player.previous} disabled={!player.loaded} aria-label="Previous (Ctrl+←)">
+      <button class="icon" onclick={player.previous} disabled={!player.loaded} aria-label={keymap.titled('Previous', 'player.previous')}>
         <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z" /></svg>
       </button>
       <button
         class="play"
         onclick={playOrToggle}
         disabled={!player.loaded && library.total === 0}
-        aria-label={player.state === 'playing' ? 'Pause' : 'Play'}
+        aria-label={keymap.titled(player.state === 'playing' ? 'Pause' : 'Play', 'player.toggle')}
       >
         {#if player.state === 'playing'}
           <svg viewBox="0 0 24 24"><path d="M7 5h3v14H7zM14 5h3v14h-3z" /></svg>
@@ -56,7 +57,7 @@
           <svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z" /></svg>
         {/if}
       </button>
-      <button class="icon" onclick={player.next} disabled={!player.hasNext} aria-label="Next (Ctrl+→)">
+      <button class="icon" onclick={player.next} disabled={!player.hasNext} aria-label={keymap.titled('Next', 'player.next')}>
         <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
       </button>
       <!-- Balances the shuffle button so Play stays centred. -->
@@ -157,7 +158,7 @@
   .error {
     margin-top: 2px !important;
     font-size: 12px;
-    color: #ff9592;
+    color: var(--danger-text);
   }
 
   .center {

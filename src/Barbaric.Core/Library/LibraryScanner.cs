@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -20,6 +21,12 @@ public sealed class LibraryScanner(LibraryDatabase database, TimeProvider? clock
 
     private const int BatchSize = 200;
 
+    /// <summary>
+    /// A batch also commits after this long, so an open write transaction never keeps other writers
+    /// (settings, gain, tags) waiting for more than a moment.
+    /// </summary>
+    private static readonly TimeSpan BatchTime = TimeSpan.FromMilliseconds(250);
+
     private const string InsertSql = """
         INSERT INTO tracks (path, file_name, fingerprint, file_size, modified_utc, title, artist, album, album_artist,
                             genre, year, track_number, duration_ms, bpm, bpm_source, added_utc)
@@ -37,7 +44,7 @@ public sealed class LibraryScanner(LibraryDatabase database, TimeProvider? clock
             path = @Path, file_name = @FileName, fingerprint = @Fingerprint, file_size = @FileSize,
             modified_utc = @ModifiedUtc, title = @Title, artist = @Artist, album = @Album,
             album_artist = @AlbumArtist, genre = @Genre, year = @Year, track_number = @TrackNumber,
-            duration_ms = @DurationMs, missing = 0,
+            duration_ms = CASE WHEN @DurationMs > 0 THEN @DurationMs ELSE duration_ms END, missing = 0,
             bpm_confidence = CASE WHEN {TagWins} THEN NULL ELSE bpm_confidence END,
             bpm_source = CASE WHEN {TagWins} THEN CASE WHEN @Bpm IS NULL THEN NULL ELSE 'tag' END ELSE bpm_source END,
             bpm = CASE WHEN {TagWins} THEN @Bpm ELSE bpm END
@@ -230,12 +237,18 @@ public sealed class LibraryScanner(LibraryDatabase database, TimeProvider? clock
     {
         private SqliteTransaction? _transaction;
         private int _pending;
+        private long _started;
 
         public void Execute(string sql, object parameters)
         {
-            _transaction ??= connection.BeginTransaction();
+            if (_transaction is null)
+            {
+                _transaction = connection.BeginTransaction();
+                _started = Stopwatch.GetTimestamp();
+            }
+
             connection.Execute(sql, parameters, _transaction);
-            if (++_pending >= BatchSize)
+            if (++_pending >= BatchSize || Stopwatch.GetElapsedTime(_started) >= BatchTime)
             {
                 Commit();
             }

@@ -79,6 +79,31 @@ public sealed class TrackRepository(LibraryDatabase database)
         await connection.ExecuteAsync("UPDATE tracks SET gain_db = @gainDb WHERE id = @id", new { id, gainDb });
     }
 
+    /// <summary>Fills in a length the file's tags didn't give, e.g. from the decoder. A known length is kept.</summary>
+    public async Task SetDurationAsync(long id, long durationMs)
+    {
+        using var connection = database.Open();
+        await connection.ExecuteAsync(
+            "UPDATE tracks SET duration_ms = @durationMs WHERE id = @id AND duration_ms = 0",
+            new { id, durationMs });
+    }
+
+    /// <summary>
+    /// The given ids that can still be played from a list in <paramref name="scope"/> (not missing, and
+    /// not hidden unless the list is the hidden songs), in the order given.
+    /// </summary>
+    public async Task<IReadOnlyList<long>> KeepPlayableAsync(IReadOnlyList<long> ids, TrackScope scope)
+    {
+        using var connection = database.Open();
+        var kept = (await connection.QueryAsync<long>(
+            """
+            SELECT id FROM tracks
+            WHERE id IN (SELECT value FROM json_each(@ids)) AND missing = 0 AND (hidden = 0 OR @hidden)
+            """,
+            new { ids = IdList.ToJson(ids), hidden = scope == TrackScope.Hidden })).ToHashSet();
+        return ids.Where(kept.Contains).ToList();
+    }
+
     /// <summary>Tracks the background analyzer still has to look at, newest first.</summary>
     public async Task<IReadOnlyList<(long Id, string Path)>> GetBpmPendingAsync(int limit)
     {
