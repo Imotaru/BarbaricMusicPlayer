@@ -1,0 +1,9 @@
+* text=auto
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.db binary
+*.wav binary
+*.mp3 binary
+*.flac binary
