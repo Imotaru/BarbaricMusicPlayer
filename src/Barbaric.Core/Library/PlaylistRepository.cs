@@ -150,7 +150,7 @@ public sealed class PlaylistRepository(LibraryDatabase database)
 
     internal static string SerializeQuery(TrackQuery query) =>
         JsonSerializer.Serialize(
-            query with { PlaylistId = null, Bpm = null, Scope = TrackScope.Library, Filter = query.Filter is { IsEmpty: false } ? query.Filter : null },
+            query with { PlaylistId = null, Bpm = null, Scope = TrackScope.Library, KeepIds = null, Filter = query.Filter is { IsEmpty: false } ? query.Filter : null },
             CoreJson.Options);
 
     /// <summary>Reads a saved view. A damaged one comes back as the plain library view rather than failing.</summary>

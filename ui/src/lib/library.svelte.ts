@@ -160,6 +160,8 @@ class Library {
   private lensPending = false
   private lensQueueTimer: ReturnType<typeof setTimeout> | undefined
   private bpmRefreshTimer: ReturnType<typeof setTimeout> | undefined
+  /** Songs tagged while the Untagged list is shown; they stay in it until the list is opened anew. */
+  private kept = new Set<number>()
 
   constructor() {
     if (!hasHost) return
@@ -184,6 +186,7 @@ class Library {
       playlistId: this.view.kind === 'manual' ? this.view.id : null,
       bpm: this.lensActive ? { ...this.lens } : null,
       scope: this.scope,
+      ...(this.kept.size > 0 ? { keepIds: [...this.kept] } : {}),
     }
   }
 
@@ -361,6 +364,11 @@ class Library {
   }
 
   dropUntagged = () => this.setFilter({ ...this.filter, untagged: false })
+
+  /** Called before tagging songs: in the Untagged list they stay put instead of vanishing. */
+  keepListed = (ids: number[]) => {
+    if (this.filter.untagged) for (const id of ids) this.kept.add(id)
+  }
 
   setMatchMode = (mode: 'all' | 'any') => this.setFilter({ ...this.filter, mode })
 
@@ -755,6 +763,7 @@ class Library {
 
   private clearForNewList() {
     this.listId++
+    this.kept.clear()
     this.selection = new Map()
     this.cursor = this.anchor = 0
   }

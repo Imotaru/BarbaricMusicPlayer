@@ -90,6 +90,7 @@
 
   // The first toggle tags every chosen song; toggling a tag they all have untags them.
   async function toggle(tagId: number, add: boolean) {
+    library.keepListed(trackIds)
     await tags.apply(tagId, trackIds, add)
     usage = new Map(usage).set(tagId, add ? count : 0)
   }

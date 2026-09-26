@@ -168,6 +168,8 @@ public enum TrackScope
 /// What the library list is showing: search text, sort order, an optional filter, and optionally a
 /// manual playlist to show instead of the whole library. <see cref="Bpm"/> is the BPM range the user
 /// narrows every view with; unlike <see cref="Filter"/> it is never saved with a playlist.
+/// <see cref="KeepIds"/> are tracks that stay listed although the filter's tags no longer match them,
+/// such as songs just tagged in the Untagged view; they are never saved either.
 /// </summary>
 public sealed record TrackQuery(
     string? Text = null,
@@ -176,7 +178,8 @@ public sealed record TrackQuery(
     TrackFilter? Filter = null,
     long? PlaylistId = null,
     BpmRange? Bpm = null,
-    TrackScope Scope = TrackScope.Library);
+    TrackScope Scope = TrackScope.Library,
+    IReadOnlyList<long>? KeepIds = null);
 
 /// <summary>What the user can override about a song. The file's tags fill these in until they do.</summary>
 public enum TrackField

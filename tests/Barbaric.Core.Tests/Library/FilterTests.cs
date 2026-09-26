@@ -80,6 +80,20 @@ public sealed class FilterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task KeepIds_StayListedDespiteTheTags_ButNotDespiteSearchOrHiding()
+    {
+        var filter = new TrackFilter { Untagged = true };
+        var keep = new[] { _tracks["Alpha"], _tracks["Bravo"] };
+
+        Assert.Equal(["Alpha", "Bravo", "Echo"], await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter, KeepIds: keep)));
+        Assert.Equal(["Alpha"], await _library.TitlesAsync(new TrackQuery("alpha", Filter: filter, KeepIds: keep)));
+        Assert.Equal(["Alpha", "Echo"], await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter, Bpm: new BpmRange(null, 100, IncludeUnknown: true), KeepIds: keep)));
+
+        await _library.Stats.SetHiddenAsync([_tracks["Bravo"]], true);
+        Assert.Equal(["Alpha", "Echo"], await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter, KeepIds: keep)));
+    }
+
+    [Fact]
     public async Task RepeatedTagIds_DoNotBreakTheAllMatch()
     {
         var rock = _tags["rock"];

@@ -112,7 +112,7 @@ public sealed class LibraryApi : IDisposable
     /// <summary>Raised on the UI thread after each scan pass that completed.</summary>
     public event EventHandler? ScanCompleted;
 
-    /// <summary>Reads <c>{ text, sort, desc, filter, playlistId, bpm, scope }</c> as sent by the UI.</summary>
+    /// <summary>Reads <c>{ text, sort, desc, filter, playlistId, bpm, scope, keepIds }</c> as sent by the UI.</summary>
     public static TrackQuery ParseQuery(JsonElement p)
     {
         if (p.ValueKind != JsonValueKind.Object)
@@ -129,7 +129,8 @@ public sealed class LibraryApi : IDisposable
         var scope = p.TryGetProperty("scope", out var sc) && Enum.TryParse<TrackScope>(sc.GetString(), ignoreCase: true, out var parsedScope)
             ? parsedScope
             : TrackScope.Library;
-        return new TrackQuery(text, sort, desc, ParseFilter(p), playlistId, ParseBpmRange(p), scope);
+        var keepIds = p.GetIds("keepIds");
+        return new TrackQuery(text, sort, desc, ParseFilter(p), playlistId, ParseBpmRange(p), scope, keepIds.Count > 0 ? keepIds : null);
     }
 
     /// <summary>Reads a <c>{ min, max, includeUnknown }</c> range; a missing or open one reads as null.</summary>

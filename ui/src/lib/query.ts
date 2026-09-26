@@ -52,6 +52,8 @@ export interface QueryContext {
   /** The BPM range narrowing every view. Never saved with a playlist. */
   bpm: BpmRange | null
   scope: TrackScope
+  /** Songs that stay listed although the filter's tags no longer match them. Never saved with a playlist. */
+  keepIds?: number[]
 }
 
 /** A filter playlist's saved view, as the host returns it. */

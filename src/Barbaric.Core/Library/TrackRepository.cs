@@ -415,29 +415,41 @@ public sealed class TrackRepository(LibraryDatabase database)
 
         if (query.Filter is { } filter)
         {
+            var tagWhere = new List<string>();
             var all = filter.AllTags.Distinct().ToList();
             if (all.Count > 0)
             {
-                where.Add("(SELECT count(*) FROM track_tags WHERE track_id = t.id AND tag_id IN @allTags) = @allCount");
+                tagWhere.Add("(SELECT count(*) FROM track_tags WHERE track_id = t.id AND tag_id IN @allTags) = @allCount");
                 parameters.Add("allTags", all);
                 parameters.Add("allCount", all.Count);
             }
 
             if (filter.AnyTags.Count > 0)
             {
-                where.Add("t.id IN (SELECT track_id FROM track_tags WHERE tag_id IN @anyTags)");
+                tagWhere.Add("t.id IN (SELECT track_id FROM track_tags WHERE tag_id IN @anyTags)");
                 parameters.Add("anyTags", filter.AnyTags.Distinct().ToList());
             }
 
             if (filter.NoneTags.Count > 0)
             {
-                where.Add("t.id NOT IN (SELECT track_id FROM track_tags WHERE tag_id IN @noneTags)");
+                tagWhere.Add("t.id NOT IN (SELECT track_id FROM track_tags WHERE tag_id IN @noneTags)");
                 parameters.Add("noneTags", filter.NoneTags.Distinct().ToList());
             }
 
             if (filter.Untagged)
             {
-                where.Add(Untagged);
+                tagWhere.Add(Untagged);
+            }
+
+            // Kept tracks bypass only the tag clauses; scope, search and BPM still apply to them.
+            if (tagWhere.Count > 0 && query.KeepIds is { Count: > 0 } keep)
+            {
+                where.Add($"(({string.Join(" AND ", tagWhere)}) OR t.id IN @keepIds)");
+                parameters.Add("keepIds", keep.Distinct().ToList());
+            }
+            else
+            {
+                where.AddRange(tagWhere);
             }
 
             AddBpmRange(where, parameters, "filterBpm", new BpmRange(filter.BpmMin, filter.BpmMax, filter.IncludeUnknownBpm));

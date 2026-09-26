@@ -130,10 +130,12 @@ public sealed class PlaylistRepositoryTests : IAsyncLifetime
         var tag = await _library.Tags.CreateAsync("t");
         await _library.Tags.AddToTracksAsync(tag.Id, Ids("A", "C", "D"));
 
-        var id = await _library.Playlists.CreateFilterAsync("New songs", new TrackQuery(Sort: TrackSort.Title, Filter: new TrackFilter { Untagged = true }));
+        var id = await _library.Playlists.CreateFilterAsync(
+            "New songs", new TrackQuery(Sort: TrackSort.Title, Filter: new TrackFilter { Untagged = true }, KeepIds: Ids("A")));
 
         var saved = (await _library.Playlists.GetAsync(id))!;
         Assert.True(saved.Query!.Filter!.Untagged);
+        Assert.Null(saved.Query.KeepIds);
         Assert.Equal(["B", "E"], await _library.TitlesAsync(saved.Query));
     }
 
