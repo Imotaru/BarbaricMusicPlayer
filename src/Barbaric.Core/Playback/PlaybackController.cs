@@ -8,8 +8,9 @@ public sealed record ListenRecord(long TrackId, PlayKind Kind, bool FlagChanged)
 
 /// <summary>
 /// Plays library tracks through the <see cref="AudioEngine"/>: builds the queue from the list the
-/// user played from (in list order or smart-shuffled), advances when a song ends, remembers each
-/// song's volume, and logs how every song was left.
+/// user played from (in list order or smart-shuffled), advances when a song ends, starts the list
+/// over after its last song (or repeats one song while <see cref="LoopTrack"/> is on), remembers
+/// each song's volume, and logs how every song was left.
 /// </summary>
 public sealed class PlaybackController : IDisposable
 {
@@ -70,6 +71,14 @@ public sealed class PlaybackController : IDisposable
 
     public bool Shuffle { get; private set; }
 
+    /// <summary>When on, a song that ends plays again instead of moving on. Next and Previous still move.</summary>
+    public bool LoopTrack { get; set; }
+
+    /// <summary>
+    /// Whether Next has somewhere to go. A list always does: after its last song it starts over.
+    /// </summary>
+    public bool HasNext => Queue.HasNext || (_queueSource is not null && Queue.Count > 0);
+
     /// <summary>Plays a track and queues the rest of the list it was picked from.</summary>
     public async Task PlayTrackAsync(long id, TrackQuery? context = null)
     {
@@ -126,7 +135,7 @@ public sealed class PlaybackController : IDisposable
 
     public async Task<bool> NextAsync()
     {
-        if (!Queue.MoveNext())
+        if (!await MoveNextAsync())
         {
             return false;
         }
@@ -379,11 +388,47 @@ public sealed class PlaybackController : IDisposable
                 return;
             }
 
-            if (!(forward ? Queue.MoveNext() : Queue.MovePrevious()))
+            if (!(forward ? await MoveNextAsync() : Queue.MovePrevious()))
             {
                 return;
             }
         }
+    }
+
+    /// <summary>
+    /// Moves the queue on by one. Past the end of a list it starts over from the top; in shuffle the
+    /// list is shuffled afresh, with the song that just played kept away from the front.
+    /// </summary>
+    private async Task<bool> MoveNextAsync()
+    {
+        if (Queue.MoveNext())
+        {
+            return true;
+        }
+
+        // A single file played on its own isn't a list, so it just ends.
+        if (_queueSource is null || Queue.Count == 0)
+        {
+            return false;
+        }
+
+        if (!Shuffle)
+        {
+            Queue.MoveFirst();
+            return true;
+        }
+
+        var current = Queue.Current;
+        var stats = await _stats.GetShuffleStatsAsync(Queue.Ids);
+        var order = SmartShuffle.Order(stats, _clock.GetUtcNow(), _random);
+        if (order.Count > 1 && order[0] == current)
+        {
+            order.RemoveAt(0);
+            order.Add(current.Value);
+        }
+
+        Queue.Set(order, 0);
+        return true;
     }
 
     private bool TryLoad(Track track, bool reportErrors = true)
@@ -510,7 +555,12 @@ public sealed class PlaybackController : IDisposable
         try
         {
             await FinishListeningAsync(LeaveReason.Ended);
-            if (Queue.MoveNext())
+            if (LoopTrack && _engine.CurrentPath is not null)
+            {
+                // Play rewinds a song that has run to its end; starting it again begins a fresh listen.
+                await _engine.PlayAsync();
+            }
+            else if (await MoveNextAsync())
             {
                 await PlayCurrentAsync(forward: true);
             }

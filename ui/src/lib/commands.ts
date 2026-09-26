@@ -44,6 +44,7 @@ export const COMMANDS: Command[] = [
   { id: 'player.volumeUp', label: 'Volume up', group: 'Playback', global: true, run: () => player.changeVolume(0.05) },
   { id: 'player.volumeDown', label: 'Volume down', group: 'Playback', global: true, run: () => player.changeVolume(-0.05) },
   { id: 'player.shuffle', label: 'Shuffle on / off', group: 'Playback', global: true, run: player.toggleShuffle },
+  { id: 'player.loop', label: 'Loop song on / off', group: 'Playback', global: true, run: player.toggleLoop },
   {
     id: 'library.playShuffled',
     label: 'Shuffle play this list',

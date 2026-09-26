@@ -18,12 +18,13 @@ public sealed class GlobalHotkeys(SettingsStore settings, Action<string> run) : 
     public const string VolumeUp = "player.volumeUp";
     public const string VolumeDown = "player.volumeDown";
     public const string Shuffle = "player.shuffle";
+    public const string Loop = "player.loop";
     public const string MiniPlayer = "window.compact";
     public const string ShowWindow = "window.show";
 
     /// <summary>The commands that can have a global hotkey. Each one's hotkey id is its index + 1.</summary>
     public static readonly string[] Commands =
-        [PlayPause, Next, Previous, SeekForward, SeekBack, VolumeUp, VolumeDown, Shuffle, MiniPlayer, ShowWindow];
+        [PlayPause, Next, Previous, SeekForward, SeekBack, VolumeUp, VolumeDown, Shuffle, Loop, MiniPlayer, ShowWindow];
 
     private const string SettingsKey = "globalHotkeys";
     private const uint NoRepeat = 0x4000;

@@ -66,10 +66,86 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
         await WaitUntil(() => _controller.CurrentTrack?.Title == "C");
         Assert.Equal(PlayerState.Playing, _engine.State);
 
-        // End of the list: playback stops on the last song.
+        // End of the list: it starts over from the top.
         CurrentOutput.DrainToEnd();
-        await WaitUntil(() => _engine.State == PlayerState.Stopped);
-        Assert.Equal("C", _controller.CurrentTrack?.Title);
+        await WaitUntil(() => _controller.CurrentTrack?.Title == "A");
+        Assert.Equal(PlayerState.Playing, _engine.State);
+        Assert.Equal(0, _controller.Queue.Index);
+    }
+
+    [Fact]
+    public async Task NextOnTheLastSong_WrapsToTheFirst()
+    {
+        await _controller.PlayTrackAsync(_ids["C"], ByTitle);
+        Assert.False(_controller.Queue.HasNext);
+        Assert.True(_controller.HasNext);
+
+        Assert.True(await _controller.NextAsync());
+
+        Assert.Equal("A", _controller.CurrentTrack?.Title);
+        Assert.Equal(3, _controller.Queue.Count);
+    }
+
+    [Fact]
+    public async Task Shuffle_AtTheEnd_ReshufflesAndPlaysEverySongAgain()
+    {
+        await _controller.PlayShuffledAsync(ByTitle);
+        await _controller.NextAsync();
+        await _controller.NextAsync();
+        var last = _controller.Queue.Current;
+        var version = _controller.Queue.Version;
+
+        CurrentOutput.DrainToEnd();
+        await WaitUntil(() => _controller.Queue.Version != version);
+
+        Assert.Equal(0, _controller.Queue.Index);
+        Assert.NotEqual(last, _controller.Queue.Current);
+        Assert.Equal(_ids.Values.Order(), _controller.Queue.Ids.Order());
+        Assert.Equal(PlayerState.Playing, _engine.State);
+    }
+
+    [Fact]
+    public async Task ASingleSong_PlayedOnItsOwn_StopsAtTheEnd()
+    {
+        await _controller.PlayTrackAsync(_ids["B"]);
+        Assert.False(_controller.HasNext);
+
+        CurrentOutput.DrainToEnd();
+        await WaitUntil(() => _listens.Count == 1);
+
+        Assert.Equal(PlayerState.Stopped, _engine.State);
+        Assert.Equal("B", _controller.CurrentTrack?.Title);
+    }
+
+    [Fact]
+    public async Task LoopTrack_ReplaysTheSong_AndCountsEachPlay()
+    {
+        _controller.LoopTrack = true;
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+
+        CurrentOutput.DrainToEnd();
+        await WaitUntil(() => _listens.Count == 1 && _engine.State == PlayerState.Playing);
+        CurrentOutput.DrainToEnd();
+        await WaitUntil(() => _listens.Count == 2 && _engine.State == PlayerState.Playing);
+
+        Assert.Equal("A", _controller.CurrentTrack?.Title);
+        Assert.Equal(TimeSpan.Zero, _engine.Position);
+        Assert.Equal([PlayKind.Complete, PlayKind.Complete], _listens.Select(l => l.Kind));
+        Assert.Equal(2, (await TrackAsync("A")).PlayCount);
+    }
+
+    [Fact]
+    public async Task LoopTrack_NextStillMovesOn()
+    {
+        _controller.LoopTrack = true;
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+
+        await _controller.NextAsync();
+        Assert.Equal("B", _controller.CurrentTrack?.Title);
+
+        CurrentOutput.DrainToEnd();
+        await WaitUntil(() => _listens.Count == 2 && _engine.State == PlayerState.Playing);
+        Assert.Equal("B", _controller.CurrentTrack?.Title);
     }
 
     [Fact]

@@ -17,6 +17,7 @@ export interface PlayerSnapshot {
   hasNext: boolean
   hasPrevious: boolean
   shuffle: boolean
+  loop: boolean
 }
 
 export const GAIN_MIN_DB = -24
@@ -37,6 +38,7 @@ class Player {
   hasNext = $state(false)
   hasPrevious = $state(false)
   shuffle = $state(false)
+  loop = $state(false)
   error = $state<string | null>(null)
 
   constructor() {
@@ -80,6 +82,12 @@ class Player {
     this.run(() => call('player.setShuffle', { on: this.shuffle }))
   }
 
+  /** Repeats the current song instead of moving on when it ends. Lists always start over after their last song. */
+  toggleLoop = () => {
+    this.loop = !this.loop
+    this.run(() => call('player.setLoop', { on: this.loop }))
+  }
+
   seek = (seconds: number) => {
     if (!this.loaded) return
     this.position = Math.min(Math.max(seconds, 0), this.duration)
@@ -114,6 +122,7 @@ class Player {
     this.hasNext = s.hasNext
     this.hasPrevious = s.hasPrevious
     this.shuffle = s.shuffle
+    this.loop = s.loop
   }
 
   private async run(action: () => Promise<unknown>) {

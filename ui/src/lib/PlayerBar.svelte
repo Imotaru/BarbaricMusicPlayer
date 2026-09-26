@@ -60,8 +60,18 @@
       <button class="icon" onclick={player.next} disabled={!player.hasNext} aria-label={keymap.titled('Next', 'player.next')}>
         <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z" /></svg>
       </button>
-      <!-- Balances the shuffle button so Play stays centred. -->
-      <span class="icon" aria-hidden="true"></span>
+      <button
+        class="icon"
+        class:on={player.loop}
+        onclick={player.toggleLoop}
+        aria-pressed={player.loop}
+        aria-label={keymap.titled('Loop song', 'player.loop')}
+        title={keymap.titled(player.loop ? 'Loop song is on: this song repeats' : 'Loop song', 'player.loop')}
+      >
+        <svg viewBox="0 0 24 24">
+          <path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2zm-4-2V9h-1l-2 1v1h1.5v4z" />
+        </svg>
+      </button>
     </div>
 
     <div class="seek">

@@ -35,6 +35,7 @@ public sealed class PlayerApi : IDisposable
     private const string QueueKey = "queue";
     private const string QueuePositionKey = "queuePos";
     private const string VolumeKey = "volume";
+    private const string LoopTrackKey = "loopTrack";
 
     private readonly AudioEngine _engine;
     private readonly PlaybackController _controller;
@@ -59,6 +60,8 @@ public sealed class PlayerApi : IDisposable
             _engine.MasterVolume = volume;
         }
 
+        _controller.LoopTrack = settings.Get<bool?>(LoopTrackKey) ?? false;
+
         bridge.Query("player.getState", _ => Snapshot());
         bridge.QueryAsync("player.openFile", async _ => await OpenFileAsync());
         bridge.CommandAsync("player.playTrack", p => _controller.PlayTrackAsync(
@@ -81,6 +84,7 @@ public sealed class PlayerApi : IDisposable
         bridge.CommandAsync("player.next", _ => NextAsync());
         bridge.CommandAsync("player.previous", _ => PreviousAsync());
         bridge.CommandAsync("player.setShuffle", p => SetShuffleAsync(p.GetProperty("on").GetBoolean()));
+        bridge.Command("player.setLoop", p => SetLoop(p.GetProperty("on").GetBoolean()));
         bridge.Command("player.seek", p => Seek(TimeSpan.FromSeconds(p.GetProperty("seconds").GetDouble())));
         bridge.CommandAsync("player.setTrackGain", async p =>
         {
@@ -154,6 +158,16 @@ public sealed class PlayerApi : IDisposable
     }
 
     public Task ToggleShuffleAsync() => SetShuffleAsync(!_controller.Shuffle);
+
+    /// <summary>Repeats the current song when it ends, instead of moving on. Remembered across sessions.</summary>
+    public void SetLoop(bool on)
+    {
+        _controller.LoopTrack = on;
+        _settings.Save(LoopTrackKey, on);
+        EmitState();
+    }
+
+    public void ToggleLoop() => SetLoop(!_controller.LoopTrack);
 
     public void Seek(TimeSpan position)
     {
@@ -300,9 +314,10 @@ public sealed class PlayerApi : IDisposable
             _engine.Position.TotalSeconds,
             _engine.TrackGainDb,
             _engine.MasterVolume,
-            _controller.Queue.HasNext,
+            _controller.HasNext,
             _controller.Queue.HasPrevious,
-            _controller.Shuffle);
+            _controller.Shuffle,
+            _controller.LoopTrack);
     }
 
     private sealed record PlayerSnapshot(
@@ -318,5 +333,6 @@ public sealed class PlayerApi : IDisposable
         float Volume,
         bool HasNext,
         bool HasPrevious,
-        bool Shuffle);
+        bool Shuffle,
+        bool Loop);
 }

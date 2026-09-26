@@ -57,6 +57,15 @@ public sealed class PlayQueue
         return true;
     }
 
+    /// <summary>Puts the cursor back on the first song, e.g. to start the list over.</summary>
+    public void MoveFirst()
+    {
+        if (_ids.Count > 0)
+        {
+            _index = 0;
+        }
+    }
+
     public bool MovePrevious()
     {
         if (!HasPrevious)

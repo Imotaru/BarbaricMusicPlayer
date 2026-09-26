@@ -14,6 +14,7 @@ export const DEFAULT_KEYS: Record<string, string[]> = {
   'player.volumeUp': ['Ctrl+ArrowUp'],
   'player.volumeDown': ['Ctrl+ArrowDown'],
   'player.shuffle': ['KeyS'],
+  'player.loop': ['KeyL'],
   'player.openFile': ['Ctrl+KeyO'],
   'library.search': ['Ctrl+KeyF', '/'],
   'selection.edit': ['KeyE'],

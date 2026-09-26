@@ -228,6 +228,7 @@ public partial class MainWindow : Window
             case GlobalHotkeys.Next: player.Run(player.NextAsync); break;
             case GlobalHotkeys.Previous: player.Run(player.PreviousAsync); break;
             case GlobalHotkeys.Shuffle: player.Run(player.ToggleShuffleAsync); break;
+            case GlobalHotkeys.Loop: player.ToggleLoop(); break;
             case GlobalHotkeys.SeekForward: player.SeekBy(5); break;
             case GlobalHotkeys.SeekBack: player.SeekBy(-5); break;
             case GlobalHotkeys.VolumeUp: player.ChangeVolume(0.05); break;
