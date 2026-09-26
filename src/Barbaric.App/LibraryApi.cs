@@ -69,6 +69,13 @@ public sealed class LibraryApi : IDisposable
             await _stats.KeepAsync(p.GetIds());
             _bridge.Emit("library.changed");
         });
+        bridge.QueryAsync("library.getSkips", async p =>
+            (await _stats.GetShuffleStatsAsync(p.GetIds())).Select(s => new { s.Id, s.PlayCount, s.SkipCount }));
+        bridge.CommandAsync("library.setSkips", async p =>
+        {
+            await _stats.SetSkipsAsync(p.GetIds(), p.GetProperty("skips").GetInt64());
+            _bridge.Emit("library.changed");
+        });
         bridge.CommandAsync("library.hide", async p =>
         {
             var ids = p.GetIds();

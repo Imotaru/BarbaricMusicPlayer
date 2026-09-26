@@ -76,6 +76,38 @@ public sealed class PlayStatsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SetSkips_ChangesOnlySkips_AndTheFlagFollows()
+    {
+        await _library.Stats.RecordAsync(_ids["B"], 10_000, 10_000, PlayKind.Complete);
+        await _library.Stats.RecordAsync(_ids["B"], 10_000, 10_000, PlayKind.Complete);
+
+        await _library.Stats.SetSkipsAsync([_ids["B"]], 9);
+
+        var track = (await _library.Tracks.GetAsync(_ids["B"]))!;
+        Assert.Equal((2, 9, true), (track.PlayCount, track.SkipCount, track.Flagged));
+        Assert.Equal(["B"], await _library.TitlesAsync(new TrackQuery(Scope: TrackScope.Suggested)));
+
+        await _library.Stats.SetSkipsAsync([_ids["B"]], 0);
+
+        track = (await _library.Tracks.GetAsync(_ids["B"]))!;
+        Assert.Equal((2, 0, false), (track.PlayCount, track.SkipCount, track.Flagged));
+        Assert.Empty(await _library.TitlesAsync(new TrackQuery(Scope: TrackScope.Suggested)));
+
+        using var connection = _library.Database.Open();
+        Assert.Equal(2, await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM play_events WHERE track_id = @id", new { id = _ids["B"] }));
+    }
+
+    [Fact]
+    public async Task SetSkips_ClampsNegativeCountsToZero()
+    {
+        await _library.Stats.RecordAsync(_ids["A"], 500, 10_000, PlayKind.Skip);
+
+        await _library.Stats.SetSkipsAsync([_ids["A"]], -3);
+
+        Assert.Equal(0, (await _library.Tracks.GetAsync(_ids["A"]))!.SkipCount);
+    }
+
+    [Fact]
     public async Task Record_ForAVanishedTrack_ReturnsNull()
     {
         Assert.Null(await _library.Stats.RecordAsync(999_999, 500, 10_000, PlayKind.Skip));

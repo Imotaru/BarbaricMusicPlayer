@@ -49,6 +49,13 @@ export interface BpmInfo {
   bpmConfidence: number | null
 }
 
+/** A track's play and skip counts, as the host reports them. */
+export interface SkipInfo {
+  id: number
+  playCount: number
+  skipCount: number
+}
+
 export interface ScanStatus {
   running: boolean
   processed: number
@@ -537,6 +544,22 @@ class Library {
   /** Takes the selected songs off the suggestions by starting their play and skip counts over. */
   keepSelected = () =>
     this.changeSelected('library.keep', (n) => `Kept ${songs(n)}. ${n === 1 ? 'Its' : 'Their'} play and skip counts start over.`)
+
+  getSkips = (trackIds: number[]) => call<SkipInfo[]>('library.getSkips', { trackIds })
+
+  /** Sets skip counts by hand; songs whose flag changes join or leave the suggestions. */
+  setSkips = (trackIds: number[], skips: number) => call('library.setSkips', { trackIds, skips })
+
+  clearSkipsSelected = () => {
+    const ids = this.selectedIds()
+    if (ids.length === 0) return
+    ui.run(async () => {
+      await this.setSkips(ids, 0)
+      // Only the suggestions lose the songs; elsewhere the selection stays where it is.
+      if (this.view.kind === 'suggested') this.setCursor(Math.min(this.cursor, Math.max(this.total - ids.length - 1, 0)))
+      ui.notify(ids.length === 1 ? 'Cleared the skips.' : `Cleared the skips of ${songs(ids.length)}.`)
+    })
+  }
 
   hideSelected = () =>
     this.changeSelected('library.hide', (n) => `Hid ${songs(n)}. Find ${n === 1 ? 'it' : 'them'} under Hidden songs.`)

@@ -26,6 +26,8 @@ export const openPlaylistPicker = (at: Point = cursorAnchor()) => ui.openPicker(
 
 export const openBpmEditor = (at: Point = cursorAnchor()) => ui.openBpmEditor(library.selectedIds(), at)
 
+export const openSkipsEditor = (at: Point = cursorAnchor()) => ui.openSkipsEditor(library.selectedIds(), at)
+
 export function openRowMenu(at: Point, index: number) {
   library.contextSelect(index)
   const count = library.selectedCount
@@ -39,6 +41,13 @@ export function openRowMenu(at: Point, index: number) {
     { label: 'Double BPM', action: () => bpm.scaleSelected(2) },
     { label: 'Halve BPM', action: () => bpm.scaleSelected(0.5) },
     { label: count > 1 ? `Analyze BPM of ${songs(count)}` : 'Analyze BPM', action: bpm.analyzeSelected },
+    { separator: true },
+    { label: 'Edit skips…', shortcut: keymap.label('selection.skips'), action: () => openSkipsEditor(at) },
+    {
+      label: count > 1 ? `Clear skips of ${songs(count)}` : 'Clear skips',
+      shortcut: keymap.label('selection.clearSkips'),
+      action: library.clearSkipsSelected,
+    },
   ]
   items.push({ separator: true })
   const hide: MenuItem = { label: 'Hide from library', shortcut: keymap.label('selection.hide'), action: library.hideSelected }

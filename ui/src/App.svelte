@@ -14,6 +14,7 @@
   import { playlists } from './lib/playlists.svelte'
   import { prefs, SIDEBAR_DEFAULT } from './lib/prefs.svelte'
   import SettingsDialog from './lib/SettingsDialog.svelte'
+  import SkipsEditor from './lib/SkipsEditor.svelte'
   import Sidebar from './lib/Sidebar.svelte'
   import { applyTheme, themeById } from './lib/themes'
   import TitleBar from './lib/TitleBar.svelte'
@@ -171,6 +172,11 @@
 {#if ui.bpmEditor}
   {#key ui.bpmEditor}
     <BpmEditor trackIds={ui.bpmEditor.trackIds} at={ui.bpmEditor} />
+  {/key}
+{/if}
+{#if ui.skipsEditor}
+  {#key ui.skipsEditor}
+    <SkipsEditor trackIds={ui.skipsEditor.trackIds} at={ui.skipsEditor} />
   {/key}
 {/if}
 {#if ui.confirm}

@@ -94,6 +94,7 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
   - Playing 80% or more of it, or to the end, counts as a play.
   - Anything in between, and Previous, Stop or closing the app, updates "last played" without counting either way.
   - The Plays and Skips columns show the counts, and sort by them.
+  - Right-click songs to **Edit skips…** (set the count by hand) or **Clear skips**. Plays are left alone, and the song joins or leaves Suggested for removal to match.
 - **Smart shuffle:** press S (or the shuffle button) to shuffle the list you're playing from, without repeats.
   - Songs you tend to skip come up later, and so do songs you heard in the last day or so.
   - Nothing is ruled out: even a song you always skip still turns up now and then.

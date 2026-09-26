@@ -38,6 +38,8 @@ class Ui {
   picker = $state<(Point & { mode: 'tag' | 'playlist'; trackIds: number[] }) | null>(null)
   /** The BPM editor popover, acting on a snapshot of the selected track ids. */
   bpmEditor = $state<(Point & { trackIds: number[] }) | null>(null)
+  /** The skip count editor popover, acting on a snapshot of the selected track ids. */
+  skipsEditor = $state<(Point & { trackIds: number[] }) | null>(null)
   confirm = $state<Confirm | null>(null)
   /** The sidebar item showing an inline name editor. */
   renaming = $state<{ kind: 'tag' | 'playlist'; id: number } | null>(null)
@@ -62,6 +64,7 @@ class Ui {
       this.menu !== null ||
       this.picker !== null ||
       this.bpmEditor !== null ||
+      this.skipsEditor !== null ||
       this.confirm !== null ||
       this.palette ||
       this.settings !== null
@@ -89,6 +92,7 @@ class Ui {
     this.closeDialogs()
     this.picker = null
     this.bpmEditor = null
+    this.skipsEditor = null
     this.confirm = null
     this.menu = { ...at, items }
   }
@@ -100,6 +104,7 @@ class Ui {
     this.closeDialogs()
     this.menu = null
     this.bpmEditor = null
+    this.skipsEditor = null
     this.confirm = null
     this.picker = { mode, trackIds, ...at }
   }
@@ -111,17 +116,31 @@ class Ui {
     this.closeDialogs()
     this.menu = null
     this.picker = null
+    this.skipsEditor = null
     this.confirm = null
     this.bpmEditor = { trackIds, ...at }
   }
 
   closeBpmEditor = () => (this.bpmEditor = null)
 
+  openSkipsEditor(trackIds: number[], at: Point) {
+    if (trackIds.length === 0) return
+    this.closeDialogs()
+    this.menu = null
+    this.picker = null
+    this.bpmEditor = null
+    this.confirm = null
+    this.skipsEditor = { trackIds, ...at }
+  }
+
+  closeSkipsEditor = () => (this.skipsEditor = null)
+
   openConfirm(confirm: Confirm) {
     this.closeDialogs()
     this.menu = null
     this.picker = null
     this.bpmEditor = null
+    this.skipsEditor = null
     this.confirm = confirm
   }
 
@@ -145,6 +164,7 @@ class Ui {
     this.menu = null
     this.picker = null
     this.bpmEditor = null
+    this.skipsEditor = null
     this.confirm = null
     this.renaming = null
     this.closeDialogs()

@@ -70,6 +70,27 @@ public sealed class PlayStatsRepository(LibraryDatabase database, TimeProvider? 
             new { ids = IdList.ToJson(ids) });
     }
 
+    /// <summary>
+    /// Sets songs' skip counts by hand. The flag follows the new counts; plays and the event log stay.
+    /// </summary>
+    public async Task SetSkipsAsync(IEnumerable<long> ids, long skips)
+    {
+        skips = Math.Max(0, skips);
+        using var connection = database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var rows = await connection.QueryAsync<(long Id, long Plays)>(
+            "SELECT id, play_count FROM tracks WHERE id IN (SELECT value FROM json_each(@ids))",
+            new { ids = IdList.ToJson(ids) },
+            transaction);
+        await connection.ExecuteAsync(
+            "UPDATE tracks SET skip_count = @skips, flagged = @flagged WHERE id = @id",
+            rows.Select(r => new { id = r.Id, skips, flagged = Listening.ShouldFlag(r.Plays, skips) }).ToList(),
+            transaction);
+
+        transaction.Commit();
+    }
+
     public async Task SetHiddenAsync(IEnumerable<long> ids, bool hidden)
     {
         using var connection = database.Open();
