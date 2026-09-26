@@ -1,0 +1,20 @@
+<Window x:Class="Barbaric.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Barbaric Music Player"
+        Width="1100" Height="700" MinWidth="480" MinHeight="320"
+        WindowStartupLocation="CenterScreen"
+        Background="#121214">
+    <!-- Frameless: the title bar is drawn by the web UI. The thin margin around the
+         WebView is left to the native window so its edges stay resizable. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="5"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"
+                      UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <wv2:WebView2 x:Name="WebView" DefaultBackgroundColor="#121214" />
+</Window>

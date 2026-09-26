@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Barbaric.App/Barbaric.App.csproj" />
+    <Project Path="src/Barbaric.Core/Barbaric.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Barbaric.Core.Tests/Barbaric.Core.Tests.csproj" />
+  </Folder>
+</Solution>
