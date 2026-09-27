@@ -327,6 +327,8 @@
     inset: 0;
     z-index: 60;
     display: grid;
+    /* One row the scrim's height, so the dialog's max-height of 100% means the window, not its own content. */
+    grid-template-rows: minmax(0, 1fr);
     place-items: center;
     padding: 16px;
     background: var(--scrim);
