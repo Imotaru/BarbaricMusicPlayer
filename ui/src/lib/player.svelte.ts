@@ -16,6 +16,7 @@ export interface PlayerSnapshot {
   /** The gain that evens this song out with the others; null until it's measured. */
   autoGainDb: number | null
   normalize: boolean
+  weighByLength: boolean
   volume: number
   hasNext: boolean
   hasPrevious: boolean
@@ -39,6 +40,7 @@ class Player {
   trackGainDb = $state(0)
   autoGainDb = $state<number | null>(null)
   normalize = $state(true)
+  weighByLength = $state(true)
   volume = $state(1)
   hasNext = $state(false)
   hasPrevious = $state(false)
@@ -112,6 +114,12 @@ class Player {
     this.run(() => call('player.setNormalize', { on }))
   }
 
+  /** Makes shuffle play long songs less often, so every song gets about the same listening time. */
+  setWeighByLength = (on: boolean) => {
+    this.weighByLength = on
+    this.run(() => call('player.setWeighByLength', { on }))
+  }
+
   setVolume = (volume: number) => {
     this.volume = Math.min(Math.max(volume, 0), 1)
     this.run(() => call('player.setVolume', { volume: this.volume }))
@@ -131,6 +139,7 @@ class Player {
     this.trackGainDb = s.trackGainDb
     this.autoGainDb = s.autoGainDb
     this.normalize = s.normalize
+    this.weighByLength = s.weighByLength
     this.volume = s.volume
     this.hasNext = s.hasNext
     this.hasPrevious = s.hasPrevious

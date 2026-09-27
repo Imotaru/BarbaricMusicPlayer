@@ -193,7 +193,9 @@ public sealed class PlayStatsTests : IAsyncLifetime
         var stats = await _library.Stats.GetShuffleStatsAsync([_ids["A"], _ids["B"]]);
 
         Assert.Equal(2, stats.Count);
-        Assert.Equal(new ShuffleStats(_ids["A"], 0, 1, _library.Clock.Now.UtcTicks), stats.Single(s => s.Id == _ids["A"]));
+        var a = stats.Single(s => s.Id == _ids["A"]);
+        Assert.Equal(new ShuffleStats(_ids["A"], 0, 1, _library.Clock.Now.UtcTicks, a.DurationMs), a);
+        Assert.True(a.DurationMs > 0);
     }
 
     [Fact]

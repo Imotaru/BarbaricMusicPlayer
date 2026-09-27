@@ -37,6 +37,7 @@ public sealed class PlayerApi : IDisposable
     internal const string VolumeKey = "volume";
     internal const string LoopTrackKey = "loopTrack";
     internal const string NormalizeKey = "normalize";
+    internal const string WeighByLengthKey = "weighByLength";
 
     private readonly AudioEngine _engine;
     private readonly PlaybackController _controller;
@@ -63,6 +64,7 @@ public sealed class PlayerApi : IDisposable
 
         _controller.LoopTrack = settings.Get<bool?>(LoopTrackKey) ?? false;
         _engine.Normalize = settings.Get<bool?>(NormalizeKey) ?? true;
+        _controller.WeighByLength = settings.Get<bool?>(WeighByLengthKey) ?? true;
 
         bridge.Query("player.getState", _ => Snapshot());
         bridge.QueryAsync("player.openFile", async _ => await OpenFileAsync());
@@ -88,6 +90,7 @@ public sealed class PlayerApi : IDisposable
         bridge.CommandAsync("player.setShuffle", p => SetShuffleAsync(p.GetProperty("on").GetBoolean()));
         bridge.Command("player.setLoop", p => SetLoop(p.GetProperty("on").GetBoolean()));
         bridge.Command("player.setNormalize", p => SetNormalize(p.GetProperty("on").GetBoolean()));
+        bridge.CommandAsync("player.setWeighByLength", p => SetWeighByLengthAsync(p.GetProperty("on").GetBoolean()));
         bridge.Command("player.seek", p => Seek(TimeSpan.FromSeconds(p.GetProperty("seconds").GetDouble())));
         bridge.CommandAsync("player.setTrackGain", async p =>
         {
@@ -177,6 +180,22 @@ public sealed class PlayerApi : IDisposable
     {
         _engine.Normalize = on;
         _settings.Save(NormalizeKey, on);
+        EmitState();
+    }
+
+    /// <summary>
+    /// Makes shuffle play long songs less often, in proportion to their length. On unless turned off;
+    /// remembered across sessions. The songs still to come in shuffle are picked again.
+    /// </summary>
+    public async Task SetWeighByLengthAsync(bool on)
+    {
+        _settings.Save(WeighByLengthKey, on);
+        if (_controller.WeighByLength != on)
+        {
+            _controller.WeighByLength = on;
+            await _controller.ReshuffleAsync();
+        }
+
         EmitState();
     }
 
@@ -329,6 +348,7 @@ public sealed class PlayerApi : IDisposable
             _engine.TrackGainDb,
             _controller.CurrentTrack is { LoudnessAnalyzed: true } ? _engine.AutoGainDb : null,
             _engine.Normalize,
+            _controller.WeighByLength,
             _engine.MasterVolume,
             _controller.HasNext,
             _controller.Queue.HasPrevious,
@@ -348,6 +368,7 @@ public sealed class PlayerApi : IDisposable
         double TrackGainDb,
         double? AutoGainDb,
         bool Normalize,
+        bool WeighByLength,
         float Volume,
         bool HasNext,
         bool HasPrevious,

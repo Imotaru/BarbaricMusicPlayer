@@ -114,10 +114,10 @@ public sealed class PlayStatsRepository(LibraryDatabase database, TimeProvider? 
     public async Task<IReadOnlyList<ShuffleStats>> GetShuffleStatsAsync(IEnumerable<long> ids)
     {
         using var connection = database.Open();
-        var rows = await connection.QueryAsync<(long Id, long Plays, long Skips, long? LastPlayed)>(
-            "SELECT id, play_count, skip_count, last_played_utc FROM tracks WHERE id IN (SELECT value FROM json_each(@ids))",
+        var rows = await connection.QueryAsync<(long Id, long Plays, long Skips, long? LastPlayed, long DurationMs)>(
+            "SELECT id, play_count, skip_count, last_played_utc, duration_ms FROM tracks WHERE id IN (SELECT value FROM json_each(@ids))",
             new { ids = IdList.ToJson(ids) });
-        return rows.Select(r => new ShuffleStats(r.Id, r.Plays, r.Skips, r.LastPlayed)).ToList();
+        return rows.Select(r => new ShuffleStats(r.Id, r.Plays, r.Skips, r.LastPlayed, r.DurationMs)).ToList();
     }
 
     public async Task<LibraryCounts> GetCountsAsync()

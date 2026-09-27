@@ -233,6 +233,11 @@ public partial class MainWindow : Window
             _player?.SetNormalize(normalize.GetBoolean());
         }
 
+        if (settings.TryGetValue(PlayerApi.WeighByLengthKey, out var weigh) && weigh.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            _ = _player?.SetWeighByLengthAsync(weigh.GetBoolean());
+        }
+
         if (settings.TryGetValue(GlobalHotkeys.SettingsKey, out var hotkeys) && hotkeys.ValueKind == JsonValueKind.Object)
         {
             _hotkeys.ReplaceAll(hotkeys.EnumerateObject()

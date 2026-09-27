@@ -204,6 +204,17 @@
             still adjusts a song from there.
           </p>
         </section>
+        <section>
+          <h3>Shuffle</h3>
+          <label class="check">
+            <input type="checkbox" checked={player.weighByLength} onchange={(e) => player.setWeighByLength(e.currentTarget.checked)} />
+            Play long songs less often
+          </label>
+          <p class="intro">
+            A song comes up in proportion to how short it is: a 1-minute song ten times as often as a 10-minute one, so
+            one long song doesn't take over a playlist. Long songs sit out some rounds of the shuffle instead.
+          </p>
+        </section>
       {:else if ui.settings === 'backup'}
         <section>
           <h3>Export</h3>

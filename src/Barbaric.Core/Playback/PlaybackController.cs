@@ -78,6 +78,12 @@ public sealed class PlaybackController : IDisposable
     public bool LoopTrack { get; set; }
 
     /// <summary>
+    /// When on, shuffle leaves long songs out of some passes through the list, so a song comes up
+    /// in inverse proportion to its length. Applies from the next shuffle; see <see cref="ReshuffleAsync"/>.
+    /// </summary>
+    public bool WeighByLength { get; set; } = true;
+
+    /// <summary>
     /// Whether Next has somewhere to go. A list always does: after its last song it starts over.
     /// </summary>
     public bool HasNext => Queue.HasNext || (_queueSource is not null && Queue.Count > 0);
@@ -117,7 +123,7 @@ public sealed class PlaybackController : IDisposable
         Shuffle = true;
         _queueSource = context;
         var stats = await _stats.GetShuffleStatsAsync(ids);
-        Queue.Set(SmartShuffle.Order(stats, _clock.GetUtcNow(), _random), 0);
+        Queue.Set(ShufflePass(stats, stats), 0);
         await PlayCurrentAsync(forward: true);
     }
 
@@ -203,6 +209,13 @@ public sealed class PlaybackController : IDisposable
         Shuffle = shuffle;
         await RebuildQueueAsync(played: []);
     }
+
+    /// <summary>
+    /// In shuffle, shuffles the songs after the playing one again, e.g. after a shuffle setting
+    /// changed. The songs already played keep their place.
+    /// </summary>
+    public Task ReshuffleAsync() =>
+        Shuffle ? RebuildQueueAsync(played: [.. Queue.Ids.Take(Queue.Index)]) : Task.CompletedTask;
 
     /// <summary>
     /// Takes songs out of the queue, e.g. after they were hidden. With <paramref name="unload"/>, a
@@ -371,9 +384,24 @@ public sealed class PlaybackController : IDisposable
         var inList = ids.ToHashSet();
         var history = played.Where(id => id != current && inList.Contains(id)).Distinct().ToList();
         var placed = history.Append(current).ToHashSet();
-        var rest = await _stats.GetShuffleStatsAsync(ids.Where(id => !placed.Contains(id)));
-        var shuffled = SmartShuffle.Order(rest, _clock.GetUtcNow(), _random);
+        var stats = await _stats.GetShuffleStatsAsync(ids);
+        var shuffled = ShufflePass(stats.Where(song => !placed.Contains(song.Id)), stats);
         return ([.. history, current, .. shuffled], history.Count);
+    }
+
+    /// <summary>
+    /// Shuffles <paramref name="songs"/> for a pass through <paramref name="list"/>. With
+    /// <see cref="WeighByLength"/>, long songs are left out of some passes; the shortest song in the
+    /// list always makes it in.
+    /// </summary>
+    private List<long> ShufflePass(IEnumerable<ShuffleStats> songs, IReadOnlyCollection<ShuffleStats> list)
+    {
+        if (WeighByLength)
+        {
+            songs = SmartShuffle.ThinByLength(songs, SmartShuffle.ReferenceLengthMs(list), _random);
+        }
+
+        return SmartShuffle.Order(songs, _clock.GetUtcNow(), _random);
     }
 
     private async Task RebuildQueueAsync(IReadOnlyList<long> played)
@@ -426,7 +454,8 @@ public sealed class PlaybackController : IDisposable
 
     /// <summary>
     /// Moves the queue on by one. Past the end of a list it starts over from the top; in shuffle the
-    /// list is shuffled afresh, with the song that just played kept away from the front.
+    /// whole list is shuffled afresh (the last pass may have left songs out), with the song that just
+    /// played kept away from the front.
     /// </summary>
     private async Task<bool> MoveNextAsync()
     {
@@ -448,8 +477,14 @@ public sealed class PlaybackController : IDisposable
         }
 
         var current = Queue.Current;
-        var stats = await _stats.GetShuffleStatsAsync(Queue.Ids);
-        var order = SmartShuffle.Order(stats, _clock.GetUtcNow(), _random);
+        var ids = await _tracks.QueryIdsAsync(_queueSource);
+        var stats = await _stats.GetShuffleStatsAsync(ids.Count > 0 ? ids : Queue.Ids);
+        var order = ShufflePass(stats, stats);
+        if (order.Count == 0)
+        {
+            order = [.. Queue.Ids];
+        }
+
         if (order.Count > 1 && order[0] == current)
         {
             order.RemoveAt(0);

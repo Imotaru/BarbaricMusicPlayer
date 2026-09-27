@@ -71,4 +71,47 @@ public class SmartShuffleTests
         Assert.InRange(cleanEarly, 1000, 2000);
         Assert.InRange(hatedEarly, 1, cleanEarly / 5);
     }
+
+    private static readonly long Minute = (long)TimeSpan.FromMinutes(1).TotalMilliseconds;
+
+    [Fact]
+    public void KeepChance_IsInverselyProportionalToLength()
+    {
+        Assert.Equal(1, SmartShuffle.KeepChance(new ShuffleStats(1, 0, 0, null, Minute), Minute));
+        Assert.Equal(0.1, SmartShuffle.KeepChance(new ShuffleStats(2, 0, 0, null, 10 * Minute), Minute), precision: 9);
+        Assert.Equal(1, SmartShuffle.KeepChance(new ShuffleStats(3, 0, 0, null, Minute / 2), Minute));
+        Assert.Equal(1, SmartShuffle.KeepChance(new ShuffleStats(4, 0, 0, null, 0), Minute));
+    }
+
+    [Fact]
+    public void ReferenceLength_IsTheShortestKnownSong_ButNotBelowTheFloor()
+    {
+        var floor = (long)SmartShuffle.ShortestLength.TotalMilliseconds;
+
+        Assert.Equal(Minute, SmartShuffle.ReferenceLengthMs([new(1, 0, 0, null, 3 * Minute), new(2, 0, 0, null, Minute), new(3, 0, 0, null, 0)]));
+        Assert.Equal(floor, SmartShuffle.ReferenceLengthMs([new(1, 0, 0, null, 3 * Minute), new(2, 0, 0, null, 1000)]));
+        Assert.Equal(floor, SmartShuffle.ReferenceLengthMs([new(1, 0, 0, null, 0)]));
+    }
+
+    [Fact]
+    public void ThinByLength_GivesEverySongAboutTheSameListeningTime()
+    {
+        const long epic = 11;
+        var songs = Enumerable.Range(1, 10).Select(id => new ShuffleStats(id, 0, 0, null, Minute)).ToList();
+        songs.Add(new ShuffleStats(epic, 0, 0, null, 10 * Minute));
+        var reference = SmartShuffle.ReferenceLengthMs(songs);
+        var random = new Random(3);
+
+        var plays = new Dictionary<long, int>();
+        for (var pass = 0; pass < 5000; pass++)
+        {
+            foreach (var song in SmartShuffle.ThinByLength(songs, reference, random))
+            {
+                plays[song.Id] = plays.GetValueOrDefault(song.Id) + 1;
+            }
+        }
+
+        Assert.All(Enumerable.Range(1, 10), id => Assert.Equal(5000, plays[id]));
+        Assert.InRange(plays[epic], 400, 600);
+    }
 }

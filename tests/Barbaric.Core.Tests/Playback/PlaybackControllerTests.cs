@@ -432,6 +432,80 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Shuffle_LeavesLongSongsOutOfSomePasses()
+    {
+        // A, B and C are 5 s, so they count as 30 s; D at 5 minutes makes it into one pass in ten.
+        await AddLongSongAsync();
+
+        int withD = 0;
+        for (var i = 0; i < 200; i++)
+        {
+            await _controller.PlayShuffledAsync(ByTitle);
+            Assert.Equal(["A", "B", "C"], _ids.Where(e => e.Key != "D" && _controller.Queue.Ids.Contains(e.Value)).Select(e => e.Key).Order());
+            withD += _controller.Queue.Ids.Contains(_ids["D"]) ? 1 : 0;
+        }
+
+        Assert.InRange(withD, 5, 40);
+
+        _controller.WeighByLength = false;
+        await _controller.PlayShuffledAsync(ByTitle);
+        Assert.Equal(_ids.Values.Order(), _controller.Queue.Ids.Order());
+    }
+
+    [Fact]
+    public async Task Shuffle_StartsEachPassFromTheWholeList()
+    {
+        await AddLongSongAsync();
+        await PlayShuffledUntilLeftOut(_ids["D"]);
+
+        // With the weighting off, the next pass has nothing to leave out.
+        _controller.WeighByLength = false;
+        while (_controller.Queue.HasNext)
+        {
+            await _controller.NextAsync();
+        }
+
+        await _controller.NextAsync();
+        Assert.Equal(_ids.Values.Order(), _controller.Queue.Ids.Order());
+    }
+
+    [Fact]
+    public async Task Reshuffle_AfterTurningTheWeightingOff_BringsLongSongsBack()
+    {
+        await AddLongSongAsync();
+        await PlayShuffledUntilLeftOut(_ids["D"]);
+        var playing = _controller.Queue.Current;
+
+        _controller.WeighByLength = false;
+        await _controller.ReshuffleAsync();
+
+        Assert.Equal((0, playing), (_controller.Queue.Index, _controller.Queue.Current));
+        Assert.Equal(_ids.Values.Order(), _controller.Queue.Ids.Order());
+    }
+
+    /// <summary>Adds a 5-minute song D to the library.</summary>
+    private async Task AddLongSongAsync()
+    {
+        _library.AddSong("d.wav", title: "D", seconds: 300);
+        await _library.Scanner.ScanAsync();
+        _ids["D"] = (await _library.AllRowsAsync()).Single(row => row.Title == "D").Id;
+    }
+
+    private async Task PlayShuffledUntilLeftOut(long id)
+    {
+        for (var i = 0; i < 100; i++)
+        {
+            await _controller.PlayShuffledAsync(ByTitle);
+            if (!_controller.Queue.Ids.Contains(id))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail("The long song was never left out.");
+    }
+
+    [Fact]
     public async Task BpmLens_InShuffle_KeepsTheSongsAlreadyPlayed()
     {
         await _library.Tracks.SetManualBpmAsync([_ids["A"]], 90);
