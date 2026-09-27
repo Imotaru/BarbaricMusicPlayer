@@ -29,6 +29,12 @@ export interface Confirm {
 
 export type SettingsTab = 'appearance' | 'playback' | 'keyboard' | 'backup'
 
+/** What the host reports about the window frame. */
+interface WindowState {
+  compact: boolean
+  compactResized: boolean
+}
+
 /** A song from an imported backup whose file couldn't be found. */
 export interface MissingSong {
   id: number
@@ -70,14 +76,20 @@ class Ui {
   settings = $state<SettingsTab | null>(null)
   /** The window is the small always-on-top mini-player. */
   compact = $state(initial.compact === true)
+  /** The mini-player has been resized away from its default size. */
+  compactResized = $state(false)
 
   private toastTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor() {
     if (!hasHost) return
-    call<{ compact: boolean }>('window.getState').then((s) => (this.compact = s.compact))
-    on<{ compact: boolean }>('window.state', (s) => {
+    call<WindowState>('window.getState').then((s) => {
       this.compact = s.compact
+      this.compactResized = s.compactResized
+    })
+    on<WindowState>('window.state', (s) => {
+      this.compact = s.compact
+      this.compactResized = s.compactResized
       if (s.compact) this.closeAll()
     })
   }
@@ -226,6 +238,11 @@ class Ui {
   setCompact = (on: boolean) => {
     if (on) this.closeAll()
     if (hasHost) this.run(() => call('window.setCompact', { on }))
+  }
+
+  /** Puts the mini-player back to its default size, now if it is showing or else the next time. */
+  resetCompactSize = () => {
+    if (hasHost) this.run(() => call('window.resetCompactSize'))
   }
 
   private closeDialogs() {

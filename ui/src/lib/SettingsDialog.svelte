@@ -185,6 +185,12 @@
             {/if}
           </div>
         </section>
+
+        <section>
+          <h3>Mini player</h3>
+          <p class="intro">Drag the mini player's edges to resize it; it keeps that size.</p>
+          <button class="action" disabled={!ui.compactResized} onclick={ui.resetCompactSize}>Reset mini player size</button>
+        </section>
       {:else if ui.settings === 'playback'}
         <section>
           <h3>Volume</h3>
@@ -635,7 +641,11 @@
     font-weight: 600;
   }
 
-  .action:hover {
+  .action:disabled {
+    opacity: 0.45;
+  }
+
+  .action:hover:not(:disabled) {
     background: var(--surface-hover);
   }
 </style>

@@ -9,7 +9,10 @@ using Microsoft.Web.WebView2.Core;
 
 namespace Barbaric.App;
 
-/// <summary>Where the window was, in device pixels, and whether it was the mini-player.</summary>
+/// <summary>
+/// Where the window was, in device pixels, and whether it was the mini-player. The mini-player's
+/// own size is in DIPs, so it stays the same across screens; null means the default size.
+/// </summary>
 public sealed record WindowSettings(
     int Left,
     int Top,
@@ -18,7 +21,9 @@ public sealed record WindowSettings(
     bool Maximized,
     bool Compact = false,
     int? CompactLeft = null,
-    int? CompactTop = null);
+    int? CompactTop = null,
+    double? CompactWidth = null,
+    double? CompactHeight = null);
 
 /// <summary>The window frame: saved placement, the compact mini-player, and the background colour.</summary>
 public partial class MainWindow
@@ -27,8 +32,10 @@ public partial class MainWindow
     private const string BackgroundKey = "background";
     internal const string UiKey = "ui";
     private const double ResizeGrip = 5;
-    private const double CompactWidth = 360;
-    private const double CompactHeight = 96;
+    private const double CompactWidth = 370;
+    private const double CompactHeight = 106;
+    private const double CompactMinWidth = 280;
+    private const double CompactMinHeight = 80;
     private const double CompactMargin = 16;
     private const double NormalMinWidth = 480;
     private const double NormalMinHeight = 320;
@@ -39,6 +46,9 @@ public partial class MainWindow
     private WindowPlacement? _expanded;
     private bool _compact;
     private NativePoint? _compactAt;
+
+    /// <summary>The size the mini-player was resized to, in DIPs, or null for the default.</summary>
+    private Size? _compactSize;
     private string _background = "#121214";
 
     /// <summary>The UI's own preferences, kept as the JSON it sent so the host never has to understand them.</summary>
@@ -63,6 +73,10 @@ public partial class MainWindow
             }
 
             _compactAt = saved.CompactLeft is { } x && saved.CompactTop is { } y ? new NativePoint(x, y) : null;
+            _compactSize = saved.CompactWidth is double w && saved.CompactHeight is double h
+                && double.IsFinite(w) && double.IsFinite(h) && w > 0 && h > 0
+                ? new Size(w, h)
+                : null;
         }
         else
         {
@@ -108,6 +122,11 @@ public partial class MainWindow
         }
 
         var compactAt = _compact ? TopLeft(NativeMethods.GetBounds(this)) : _compactAt;
+        if (_compact)
+        {
+            RememberCompactSize();
+        }
+
         var normal = placement.NormalPosition;
         _settings.Save(WindowKey, new WindowSettings(
             normal.Left,
@@ -117,7 +136,9 @@ public partial class MainWindow
             IsMaximized(placement),
             _compact,
             compactAt?.X,
-            compactAt?.Y));
+            compactAt?.Y,
+            _compactSize?.Width,
+            _compactSize?.Height));
     }
 
     private void SetCompact(bool compact)
@@ -151,12 +172,12 @@ public partial class MainWindow
             WindowState = WindowState.Normal;
         }
 
-        MinWidth = 0;
-        MinHeight = 0;
+        MinWidth = CompactMinWidth;
+        MinHeight = CompactMinHeight;
 
-        // No resize border or maximize: the mini-player has one size and just sits on top.
-        ResizeMode = ResizeMode.CanMinimize;
-        WindowChrome.SetWindowChrome(this, CreateChrome(resizeBorder: 0));
+        // Resizable like the full window, but it never maximizes (see StateChanged) and sits on top.
+        ResizeMode = ResizeMode.CanResize;
+        WindowChrome.SetWindowChrome(this, CreateChrome(ResizeGrip));
         Topmost = true;
         NativeMethods.KeepOnTop(this);
         NativeMethods.SetBounds(this, CompactBounds());
@@ -167,6 +188,7 @@ public partial class MainWindow
     private void LeaveCompact()
     {
         _compactAt = TopLeft(NativeMethods.GetBounds(this));
+        RememberCompactSize();
         _compact = false;
         Topmost = false;
         ResizeMode = ResizeMode.CanResize;
@@ -195,21 +217,64 @@ public partial class MainWindow
     {
         if (_compactAt is { } at && NativeMethods.MonitorAt(at.X + 8, at.Y + 8) is { } monitor)
         {
-            var (width, height) = CompactSize(monitor.Dpi);
             var work = monitor.WorkArea;
+            var (width, height) = CompactSize(monitor.Dpi, work);
             var left = Math.Clamp(at.X, work.Left, Math.Max(work.Left, work.Right - width));
             var top = Math.Clamp(at.Y, work.Top, Math.Max(work.Top, work.Bottom - height));
             return new NativeRect(left, top, left + width, top + height);
         }
 
         var (area, dpi) = NativeMethods.CurrentMonitor(this);
-        var (w, h) = CompactSize(dpi);
+        var (w, h) = CompactSize(dpi, area);
         var margin = (int)Math.Round(CompactMargin * dpi / 96);
         return new NativeRect(area.Right - w - margin, area.Bottom - h - margin, area.Right - margin, area.Bottom - margin);
     }
 
-    private static (int Width, int Height) CompactSize(uint dpi) =>
-        ((int)Math.Round(CompactWidth * dpi / 96), (int)Math.Round(CompactHeight * dpi / 96));
+    /// <summary>The mini-player's size in device pixels, no bigger than the work area.</summary>
+    private (int Width, int Height) CompactSize(uint dpi, NativeRect work)
+    {
+        var size = _compactSize ?? new Size(CompactWidth, CompactHeight);
+        return (
+            Math.Min((int)Math.Round(size.Width * dpi / 96), work.Width),
+            Math.Min((int)Math.Round(size.Height * dpi / 96), work.Height));
+    }
+
+    /// <summary>Keeps the mini-player's current size, unless it is still the default one.</summary>
+    private void RememberCompactSize()
+    {
+        if (WindowState != WindowState.Normal)
+        {
+            return;
+        }
+
+        var bounds = NativeMethods.GetBounds(this);
+        var (_, dpi) = NativeMethods.CurrentMonitor(this);
+        var width = bounds.Width * 96.0 / dpi;
+        var height = bounds.Height * 96.0 / dpi;
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        // Rounding to device pixels shouldn't turn an untouched mini-player into a custom size.
+        var isDefault = Math.Abs(width - CompactWidth) < 1.5 && Math.Abs(height - CompactHeight) < 1.5;
+        _compactSize = isDefault ? null : new Size(width, height);
+    }
+
+    private void ResetCompactSize()
+    {
+        _compactSize = null;
+        if (_compact && WindowState == WindowState.Normal)
+        {
+            var at = TopLeft(NativeMethods.GetBounds(this));
+            var (area, dpi) = NativeMethods.CurrentMonitor(this);
+            var (width, height) = CompactSize(dpi, area);
+            NativeMethods.SetBounds(this, new NativeRect(at.X, at.Y, at.X + width, at.Y + height));
+        }
+
+        SaveFrameSettings();
+        EmitWindowState();
+    }
 
     private static NativePoint TopLeft(NativeRect rect) => new(rect.Left, rect.Top);
 
@@ -226,10 +291,9 @@ public partial class MainWindow
         UseAeroCaptionButtons = false,
     };
 
+    // The inset leaves the native resize border uncovered by the WebView, in the mini-player too.
     private void UpdateFrameInset() =>
-        WebView.Margin = _compact ? new Thickness(0)
-            : WindowState == WindowState.Maximized ? NativeMethods.MaximizedOverhang(this)
-            : new Thickness(ResizeGrip);
+        WebView.Margin = WindowState == WindowState.Maximized ? NativeMethods.MaximizedOverhang(this) : new Thickness(ResizeGrip);
 
     private void RegisterWindowApi(WebBridge bridge)
     {
@@ -244,6 +308,7 @@ public partial class MainWindow
         });
         bridge.Command("window.close", _ => Close());
         bridge.Command("window.setCompact", p => SetCompact(p.GetProperty("on").GetBoolean()));
+        bridge.Command("window.resetCompactSize", _ => ResetCompactSize());
 
         // Keeps the native resize border the same color as the UI theme.
         bridge.Command("window.setBackground", p =>
@@ -277,7 +342,12 @@ public partial class MainWindow
         });
     }
 
-    private object WindowSnapshot() => new { maximized = WindowState == WindowState.Maximized, compact = _compact };
+    private object WindowSnapshot() => new
+    {
+        maximized = WindowState == WindowState.Maximized,
+        compact = _compact,
+        compactResized = _compactSize is not null,
+    };
 
     private void EmitWindowState() => _bridge?.Emit("window.state", WindowSnapshot());
 

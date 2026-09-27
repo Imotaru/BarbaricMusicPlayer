@@ -24,10 +24,13 @@
   import TrackList from './lib/TrackList.svelte'
   import { ui } from './lib/ui.svelte'
 
-  // Theme tokens on the page, and the same background on the native window border.
+  // Theme tokens on the page, and the same background on the native window border. The mini-player
+  // is a surface, so its resize border takes that colour instead.
   $effect(() => {
-    const background = applyTheme(themeById(prefs.theme), prefs.accent)
-    if (hasHost) call('window.setBackground', { color: background }).catch(() => {})
+    const theme = themeById(prefs.theme)
+    const background = applyTheme(theme, prefs.accent)
+    const border = ui.compact ? theme.tokens.surface : background
+    if (hasHost) call('window.setBackground', { color: border }).catch(() => {})
   })
 
   // A playlist deleted elsewhere (or from its own menu) can't stay open.
