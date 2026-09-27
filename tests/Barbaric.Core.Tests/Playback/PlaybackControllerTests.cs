@@ -483,6 +483,67 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
         Assert.Equal(_ids.Values.Order(), _controller.Queue.Ids.Order());
     }
 
+
+    [Fact]
+    public async Task SongsTaggedWhilePlaying_JoinThePoolOnlyWhenTheQueueIsDrawnAgain()
+    {
+        var tag = await _library.Tags.CreateAsync("keep");
+        await _library.Tags.AddToTracksAsync(tag.Id, [_ids["A"], _ids["C"]]);
+        var context = ByTitle with { Filter = new TrackFilter { AllTags = [tag.Id] } };
+        await _controller.PlayTrackAsync(_ids["A"], context);
+
+        await _library.Tags.AddToTracksAsync(tag.Id, [_ids["B"]]);
+        Assert.Equal([_ids["A"], _ids["C"]], _controller.Pool);
+        Assert.Equal(context, _controller.Source);
+
+        await _controller.SetShuffleAsync(true);
+        Assert.Equal(_ids.Values.Order(), _controller.Pool.Order());
+    }
+
+    [Fact]
+    public async Task Pool_KeepsTheSourceOrder_AndTheSongsShuffleLeftOut()
+    {
+        await AddLongSongAsync();
+        await PlayShuffledUntilLeftOut(_ids["D"]);
+
+        Assert.Equal([_ids["A"], _ids["B"], _ids["C"], _ids["D"]], _controller.Pool);
+    }
+
+    [Fact]
+    public async Task PlayFromPool_InListOrder_MovesToTheSong()
+    {
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+
+        await _controller.PlayFromPoolAsync(_ids["C"]);
+
+        Assert.Equal("C", _controller.CurrentTrack?.Title);
+        Assert.Equal([_ids["A"], _ids["B"], _ids["C"]], _controller.Queue.Ids);
+        Assert.Equal(2, _controller.Queue.Index);
+    }
+
+    [Fact]
+    public async Task PlayFromPool_InShuffle_PlaysTheSongNext_AndKeepsTheRestOfThePass()
+    {
+        await AddLongSongAsync();
+        await PlayShuffledUntilLeftOut(_ids["D"]);
+        var before = _controller.Queue.Ids.ToList();
+
+        await _controller.PlayFromPoolAsync(_ids["D"]);
+
+        Assert.Equal("D", _controller.CurrentTrack?.Title);
+        Assert.Equal(1, _controller.Queue.Index);
+        Assert.Equal(before, _controller.Queue.Ids.Where(id => id != _ids["D"]));
+    }
+
+    [Fact]
+    public async Task HiddenSongs_LeaveThePool()
+    {
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+
+        await _controller.RemoveAsync([_ids["B"]], unload: false);
+
+        Assert.Equal([_ids["A"], _ids["C"]], _controller.Pool);
+    }
     /// <summary>Adds a 5-minute song D to the library.</summary>
     private async Task AddLongSongAsync()
     {

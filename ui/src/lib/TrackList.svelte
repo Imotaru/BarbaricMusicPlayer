@@ -16,7 +16,7 @@
   type Column = { key: SortKey | null; label: string; numeric?: boolean; optional?: boolean }
 
   const columns = $derived<Column[]>([
-    ...(library.view.kind === 'manual' ? [{ key: 'position', label: '#', numeric: true } as Column] : []),
+    ...(library.view.kind === 'manual' || library.view.kind === 'playing' ? [{ key: 'position', label: '#', numeric: true } as Column] : []),
     { key: 'title', label: 'Title' },
     { key: 'artist', label: 'Artist' },
     // Missing songs show where their file was last seen, to help find it again.
@@ -37,6 +37,7 @@
     missing: 'Search missing songs…',
     filter: 'Search this playlist…',
     manual: 'Search this playlist…',
+    playing: 'Search the songs playing…',
   }
 
   let viewport = $state<HTMLDivElement>()
@@ -93,7 +94,7 @@
   }
 </script>
 
-<section class="tracks" class:numbered={library.view.kind === 'manual'}>
+<section class="tracks" class:numbered={library.view.kind === 'manual' || library.view.kind === 'playing'}>
   <ViewHeader />
 
   <div class="toolbar">
@@ -174,6 +175,9 @@
         {:else if library.view.kind === 'missing'}
           <p class="big">No missing songs</p>
           <p>Songs whose file can't be found wait here, with their tags and playlists, until a scan finds the file again.</p>
+        {:else if library.view.kind === 'playing'}
+          <p class="big">Nothing playing</p>
+          <p>Play a song from any list and the songs it plays through show up here.</p>
         {:else if library.view.kind === 'manual'}
           <p class="big">This playlist is empty</p>
           <p>Select songs anywhere in your library and add them from their right-click menu{#if keymap.label('selection.playlist')}&nbsp;or with <kbd>{keymap.label('selection.playlist')}</kbd>{/if}.</p>
@@ -207,7 +211,7 @@
             oncontextmenu={(e) => onRowContextmenu(e, index)}
           >
             {#if row}
-              {#if library.view.kind === 'manual'}
+              {#if library.view.kind === 'manual' || library.view.kind === 'playing'}
                 <span class="cell numeric dim">{row.position === null ? '' : row.position + 1}</span>
               {/if}
               <span class="cell title">

@@ -198,4 +198,17 @@ public sealed class FilterTests : IAsyncLifetime
     }
 
     private List<long> Ids(string[] tags) => [.. tags.Select(t => _tags[t])];
+
+    [Fact]
+    public async Task PlayingScope_ListsTheGivenSongs_InTheirOrder_OrAsSorted()
+    {
+        var ids = new[] { _tracks["Delta"], _tracks["Alpha"], _tracks["Charlie"] };
+        var query = new TrackQuery(Sort: TrackSort.Position, Scope: TrackScope.Playing, Ids: ids);
+
+        Assert.Equal(["Delta", "Alpha", "Charlie"], await _library.TitlesAsync(query));
+        Assert.Equal([0, 1, 2], (await _library.AllRowsAsync(query)).Select(r => r.Position));
+        Assert.Equal(["Alpha", "Charlie", "Delta"], await _library.TitlesAsync(query with { Sort = TrackSort.Title }));
+        Assert.Equal(["Delta", "Charlie"], await _library.TitlesAsync(query with { Text = "two" }));
+        Assert.Equal(ids, await _library.Tracks.QueryIdsAsync(query));
+    }
 }

@@ -33,7 +33,12 @@ public sealed class TrackRepository(LibraryDatabase database)
         var (source, parameters) = Filter(query);
         parameters.Add("offset", Math.Max(0, offset));
         parameters.Add("limit", Math.Clamp(limit, 1, 1000));
-        var columns = query.PlaylistId is null ? RowColumns : RowColumns + ", pt.position";
+        var columns = query switch
+        {
+            { Scope: TrackScope.Playing } => RowColumns + ", pool.key AS position",
+            { PlaylistId: not null } => RowColumns + ", pt.position",
+            _ => RowColumns,
+        };
 
         using var connection = database.Open();
         var total = await connection.ExecuteScalarAsync<long>($"SELECT count(*) {source}", parameters);
@@ -426,9 +431,17 @@ public sealed class TrackRepository(LibraryDatabase database)
                 TrackScope.Suggested => $"{Visible} AND t.flagged = 1",
                 TrackScope.Hidden => "t.missing = 0 AND t.hidden = 1",
                 TrackScope.Missing => "t.missing = 1",
+                TrackScope.Playing => "t.missing = 0",
                 _ => Visible,
             },
         };
+
+        // The pool's order is the order of the list it was drawn from, so it sorts by position.
+        if (query.Scope == TrackScope.Playing)
+        {
+            from += " JOIN json_each(@ids) pool ON pool.value = t.id";
+            parameters.Add("ids", IdList.ToJson(query.Ids ?? []));
+        }
 
         if (query.PlaylistId is { } playlistId)
         {
@@ -530,6 +543,7 @@ public sealed class TrackRepository(LibraryDatabase database)
             TrackSort.Added => $"t.added_utc {dir}",
             TrackSort.Plays => $"t.play_count {dir}, t.title COLLATE NOCASE",
             TrackSort.Skips => $"t.skip_count {dir}, t.title COLLATE NOCASE",
+            TrackSort.Position when query.Scope == TrackScope.Playing => $"pool.key {dir}",
             TrackSort.Position when query.PlaylistId is not null => $"pt.position {dir}",
             _ => $"t.artist IS NULL, t.artist COLLATE NOCASE {dir}, t.album COLLATE NOCASE {dir}, t.track_number, t.title COLLATE NOCASE",
         };

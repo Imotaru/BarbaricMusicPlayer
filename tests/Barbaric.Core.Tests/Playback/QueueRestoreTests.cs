@@ -169,6 +169,33 @@ public sealed class QueueRestoreTests : IAsyncLifetime
         Assert.Equal(["A", "B", "C", "D"], await TitlesAsync(second.Queue.Ids));
     }
 
+
+    [Fact]
+    public async Task Restore_BringsBackThePool()
+    {
+        var (_, first) = NewSession();
+        await first.PlayTrackAsync(_ids["A"], ByTitle);
+        var snapshot = RoundTrip(first.Snapshot()! with { Ids = [_ids["A"], _ids["B"]] });
+
+        var (_, second) = NewSession();
+        Assert.True(await second.RestoreAsync(snapshot, RoundTrip(first.Position()!)));
+
+        Assert.Equal(["A", "B"], await TitlesAsync(second.Queue.Ids));
+        Assert.Equal(["A", "B", "C", "D"], await TitlesAsync(second.Pool));
+    }
+
+    [Fact]
+    public async Task Restore_OfAQueueSavedWithoutAPool_UsesItsSongs()
+    {
+        var (_, first) = NewSession();
+        await first.PlayTrackAsync(_ids["A"], ByTitle);
+        var snapshot = RoundTrip(first.Snapshot()! with { Ids = [_ids["A"], _ids["C"]], Pool = null });
+
+        var (_, second) = NewSession();
+        Assert.True(await second.RestoreAsync(snapshot, RoundTrip(first.Position()!)));
+
+        Assert.Equal(["A", "C"], await TitlesAsync(second.Pool));
+    }
     [Fact]
     public void SnapshotSource_KeepsPlaylistScopeAndLens()
     {

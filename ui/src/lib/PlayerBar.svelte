@@ -1,6 +1,6 @@
 <script lang="ts">
   import { keymap } from './keymap.svelte'
-  import { library } from './library.svelte'
+  import { library, songs } from './library.svelte'
   import { GAIN_MAX_DB, GAIN_MIN_DB, formatGain, formatTime, player } from './player.svelte'
 
   // While dragging the seek bar, show the drag position instead of live playback position.
@@ -16,21 +16,57 @@
 Adjusts on top of the automatic level (${auto}) that evens it out with other songs.`
   })
 
+  // The list the playing songs came from; its tile opens them.
+  const source = $derived(player.loaded && player.source ? library.describeSource(player.source) : null)
+  const sourceTitle = $derived(
+    source ? keymap.titled(`Playing from ${source.name} · ${songs(player.poolSize)}. Show them`, 'view.playing') : '',
+  )
+
   // With nothing loaded, the play button starts the selected song in the list.
   const playOrToggle = () => (player.loaded ? player.toggle() : library.playSelected())
 </script>
 
 <footer class="player-bar">
   <div class="now">
-    {#if player.loaded}
-      <p class="title" title={player.path}>{player.title}</p>
-      <p class="sub">{[player.artist, player.album].filter(Boolean).join(' — ') || 'Unknown artist'}</p>
-    {:else}
-      <p class="title dim">Nothing playing</p>
+    {#if source}
+      <button
+        class="source"
+        class:active={library.view.kind === 'playing'}
+        style:--tint={source.color ?? 'var(--accent)'}
+        onclick={library.openNowPlaying}
+        aria-label="Show the songs playing from {source.name}"
+        title={sourceTitle}
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          {#if source.kind === 'tags'}
+            <path d="M2 2.5h5.3l6.2 6.2-4.8 4.8L2.5 7.3z" /><circle cx="5.3" cy="5.3" r="1" />
+          {:else if source.kind === 'filter'}
+            <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" />
+          {:else if source.kind === 'manual'}
+            <path d="M2 4h9M2 8h9M2 12h6M13 10v5M10.5 12.5h5" />
+          {:else if source.kind === 'search'}
+            <circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 4 4" />
+          {:else if source.kind === 'suggested'}
+            <path d="M3 3.5 10 8l-7 4.5zM12.5 3.5v9" />
+          {:else if source.kind === 'hidden'}
+            <path d="M1.5 8S3.9 3.5 8 3.5 14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /><path d="m2.5 13.5 11-11" />
+          {:else}
+            <path d="M6 12.5V3.5l7-1.5v9" /><circle cx="4.5" cy="12.5" r="1.8" /><circle cx="11.5" cy="11" r="1.8" />
+          {/if}
+        </svg>
+      </button>
     {/if}
-    {#if player.error}
-      <p class="error" role="alert" title={player.error}>{player.error}</p>
-    {/if}
+    <div class="text">
+      {#if player.loaded}
+        <p class="title" title={player.path}>{player.title}</p>
+        <p class="sub">{[player.artist, player.album].filter(Boolean).join(' — ') || 'Unknown artist'}</p>
+      {:else}
+        <p class="title dim">Nothing playing</p>
+      {/if}
+      {#if player.error}
+        <p class="error" role="alert" title={player.error}>{player.error}</p>
+      {/if}
+    </div>
   </div>
 
   <div class="center">
@@ -146,7 +182,47 @@ Adjusts on top of the automatic level (${auto}) that evens it out with other son
   }
 
   .now {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     min-width: 0;
+  }
+
+  .text {
+    min-width: 0;
+  }
+
+  .source {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--tint) 35%, var(--border));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--tint) 16%, var(--surface));
+    color: var(--tint);
+    transition: background 120ms ease;
+  }
+
+  .source:hover {
+    background: color-mix(in srgb, var(--tint) 26%, var(--surface));
+  }
+
+  .source.active {
+    border-color: var(--tint);
+    box-shadow: 0 0 0 1px var(--tint);
+  }
+
+  .source svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .now p {

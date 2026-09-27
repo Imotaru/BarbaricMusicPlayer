@@ -69,4 +69,48 @@ public class PlayQueueTests
         Assert.Equal<long>([7], queue.Ids);
         Assert.False(queue.HasNext);
     }
+
+    [Fact]
+    public void Pool_IsTheIds_UnlessGiven()
+    {
+        var queue = new PlayQueue();
+        queue.Set([3, 1], 0);
+        Assert.Equal<long>([3, 1], queue.Pool);
+
+        queue.Set([3, 1], 0, pool: [1, 2, 3, 4]);
+        Assert.Equal<long>([1, 2, 3, 4], queue.Pool);
+    }
+
+    [Fact]
+    public void Remove_AlsoTakesSongsOutOfThePool_ButNotTheCurrentOne()
+    {
+        var queue = new PlayQueue();
+        queue.Set([1, 2], 0, pool: [1, 2, 3, 4]);
+
+        queue.Remove([1, 4]);
+
+        Assert.Equal<long>([1, 2, 3], queue.Pool);
+    }
+
+    [Fact]
+    public void PlayNext_MovesOrInsertsTheSongAfterTheCurrentOne()
+    {
+        var queue = new PlayQueue();
+        queue.Set([1, 2, 3, 4], 1, pool: [1, 2, 3, 4, 5]);
+        var version = queue.Version;
+
+        queue.PlayNext(4);
+        Assert.Equal<long>([1, 2, 4, 3], queue.Ids);
+        Assert.Equal(2, queue.Current);
+        Assert.True(queue.Version > version);
+
+        queue.PlayNext(1);
+        Assert.Equal<long>([2, 1, 4, 3], queue.Ids);
+        Assert.Equal(2, queue.Current);
+
+        queue.PlayNext(5);
+        Assert.Equal<long>([2, 5, 1, 4, 3], queue.Ids);
+        Assert.True(queue.MoveNext());
+        Assert.Equal(5, queue.Current);
+    }
 }

@@ -64,10 +64,19 @@ public sealed class PlaybackController : IDisposable
     /// </summary>
     public event EventHandler<Track>? TrackUpdated;
 
+    /// <summary>Raised after songs were taken out of the queue and its pool.</summary>
+    public event EventHandler? QueueTrimmed;
+
     /// <summary>Raised after a library song was loaded, before it starts playing.</summary>
     public event EventHandler<Track>? TrackLoaded;
 
     public PlayQueue Queue { get; } = new();
+
+    /// <summary>The songs being played through; see <see cref="PlayQueue.Pool"/>.</summary>
+    public IReadOnlyList<long> Pool => Queue.Pool;
+
+    /// <summary>The list the queue was built from, or null for a song played on its own.</summary>
+    public TrackQuery? Source => _queueSource;
 
     /// <summary>The library track that is loaded, or null for a file played from outside the library.</summary>
     public Track? CurrentTrack { get; private set; }
@@ -103,7 +112,7 @@ public sealed class PlaybackController : IDisposable
         }
 
         var (order, index) = await ArrangeAsync(ids, id, played: []);
-        Queue.Set(order, index);
+        Queue.Set(order, index, ids);
         await PlayCurrentAsync(forward: true);
     }
 
@@ -123,7 +132,7 @@ public sealed class PlaybackController : IDisposable
         Shuffle = true;
         _queueSource = context;
         var stats = await _stats.GetShuffleStatsAsync(ids);
-        Queue.Set(ShufflePass(stats, stats), 0);
+        Queue.Set(ShufflePass(stats, stats), 0, ids);
         await PlayCurrentAsync(forward: true);
     }
 
@@ -169,6 +178,33 @@ public sealed class PlaybackController : IDisposable
 
         await FinishListeningAsync(LeaveReason.Back);
         await PlayCurrentAsync(forward: false);
+    }
+
+    /// <summary>
+    /// Plays a song from the pool without rebuilding the queue. In list order the queue moves to it;
+    /// in shuffle, or when shuffle left it out of this pass, it is played next and the rest of the
+    /// pass keeps its order.
+    /// </summary>
+    public async Task PlayFromPoolAsync(long id)
+    {
+        if (Queue.Current is null || !Queue.Pool.Contains(id))
+        {
+            return;
+        }
+
+        await FinishListeningAsync(LeaveReason.Switched);
+        var at = Shuffle ? -1 : Queue.IndexOf(id);
+        if (at >= 0)
+        {
+            Queue.MoveTo(at);
+        }
+        else if (Queue.Current != id)
+        {
+            Queue.PlayNext(id);
+            Queue.MoveNext();
+        }
+
+        await PlayCurrentAsync(forward: true);
     }
 
     public async Task StopAsync()
@@ -224,6 +260,8 @@ public sealed class PlaybackController : IDisposable
     public async Task RemoveAsync(IReadOnlyCollection<long> ids, bool unload)
     {
         Queue.Remove(ids);
+        QueueTrimmed?.Invoke(this, EventArgs.Empty);
+
         if (unload && CurrentTrack is { } track && ids.Contains(track.Id))
         {
             await FinishListeningAsync(LeaveReason.Removed);
@@ -236,7 +274,7 @@ public sealed class PlaybackController : IDisposable
 
     /// <summary>The queue to save, or null when nothing from the library is loaded.</summary>
     public QueueSnapshot? Snapshot() =>
-        CurrentTrack is null || Queue.Count == 0 ? null : new QueueSnapshot([.. Queue.Ids], _queueSource, Shuffle);
+        CurrentTrack is null || Queue.Count == 0 ? null : new QueueSnapshot([.. Queue.Ids], _queueSource, Shuffle, [.. Queue.Pool]);
 
     /// <summary>Where playback is in the queue, or null when nothing from the library is loaded.</summary>
     public QueuePosition? Position() =>
@@ -255,7 +293,8 @@ public sealed class PlaybackController : IDisposable
     {
         // The UI starts every session with an open BPM lens, so the queue must not keep a narrower one.
         var source = snapshot.Source is null ? null : snapshot.Source with { Bpm = null };
-        var ids = (await _tracks.KeepPlayableAsync(snapshot.Ids, source?.Scope ?? TrackScope.Library)).ToList();
+        var scope = source?.Scope ?? TrackScope.Library;
+        var ids = (await _tracks.KeepPlayableAsync(snapshot.Ids, scope)).ToList();
         if (ids.Count == 0)
         {
             return false;
@@ -272,7 +311,8 @@ public sealed class PlaybackController : IDisposable
 
         _queueSource = source;
         Shuffle = snapshot.Shuffle;
-        Queue.Set(ids, index);
+        var pool = snapshot.Pool is { } saved ? await _tracks.KeepPlayableAsync(saved, scope) : null;
+        Queue.Set(ids, index, pool);
 
         for (var attempt = 0; attempt < Queue.Count; attempt++)
         {
@@ -420,7 +460,7 @@ public sealed class PlaybackController : IDisposable
         // The queue may have moved on while the ids were loading.
         if (Queue.Current == current && index >= 0)
         {
-            Queue.Set(order, index);
+            Queue.Set(order, index, ids);
         }
     }
 
@@ -491,7 +531,7 @@ public sealed class PlaybackController : IDisposable
             order.Add(current.Value);
         }
 
-        Queue.Set(order, 0);
+        Queue.Set(order, 0, ids.Count > 0 ? ids : Queue.Pool);
         return true;
     }
 

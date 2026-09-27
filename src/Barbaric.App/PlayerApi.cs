@@ -68,9 +68,15 @@ public sealed class PlayerApi : IDisposable
 
         bridge.Query("player.getState", _ => Snapshot());
         bridge.QueryAsync("player.openFile", async _ => await OpenFileAsync());
-        bridge.CommandAsync("player.playTrack", p => _controller.PlayTrackAsync(
-            p.GetProperty("id").GetInt64(),
-            p.TryGetProperty("context", out var context) ? LibraryApi.ParseQuery(context) : null));
+        bridge.CommandAsync("player.playTrack", p =>
+        {
+            var id = p.GetProperty("id").GetInt64();
+            var context = p.TryGetProperty("context", out var c) ? LibraryApi.ParseQuery(c) : null;
+
+            // The songs being played through aren't a list to play from anew: play within them.
+            return context?.Scope == TrackScope.Playing ? PlayFromPoolAsync(id) : _controller.PlayTrackAsync(id, context);
+        });
+        bridge.CommandAsync("player.playFromPool", p => PlayFromPoolAsync(p.GetProperty("id").GetInt64()));
         bridge.CommandAsync("player.playShuffled", async p =>
         {
             await _controller.PlayShuffledAsync(LibraryApi.ParseQuery(p.GetProperty("context")));
@@ -105,6 +111,7 @@ public sealed class PlayerApi : IDisposable
         _controller.Error += OnControllerError;
         _controller.ListenRecorded += OnListenRecorded;
         _controller.TrackUpdated += OnTrackUpdated;
+        _controller.QueueTrimmed += OnQueueTrimmed;
 
         _positionTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background, (_, _) => EmitPosition(), _dispatcher);
     }
@@ -154,6 +161,13 @@ public sealed class PlayerApi : IDisposable
     public void Pause() => _engine.Pause();
 
     public Task NextAsync() => _controller.NextAsync();
+
+    /// <summary>Plays a song from the ones being played through, keeping the queue as it is.</summary>
+    public async Task PlayFromPoolAsync(long id)
+    {
+        await _controller.PlayFromPoolAsync(id);
+        EmitState();
+    }
 
     public Task PreviousAsync() => _controller.PreviousAsync();
 
@@ -287,6 +301,7 @@ public sealed class PlayerApi : IDisposable
         _controller.Error -= OnControllerError;
         _controller.ListenRecorded -= OnListenRecorded;
         _controller.TrackUpdated -= OnTrackUpdated;
+        _controller.QueueTrimmed -= OnQueueTrimmed;
     }
 
     private async Task<PlayerSnapshot?> OpenFileAsync()
@@ -324,6 +339,9 @@ public sealed class PlayerApi : IDisposable
         EmitState();
     });
 
+    // The pool's size shows in the player bar.
+    private void OnQueueTrimmed(object? sender, EventArgs e) => _dispatcher.BeginInvoke(EmitState);
+
     private void EmitState()
     {
         _bridge.Emit("player.state", Snapshot());
@@ -353,7 +371,10 @@ public sealed class PlayerApi : IDisposable
             _controller.HasNext,
             _controller.Queue.HasPrevious,
             _controller.Shuffle,
-            _controller.LoopTrack);
+            _controller.LoopTrack,
+            _controller.Queue.Version,
+            _controller.Pool.Count,
+            _controller.Source is { } source && _controller.Queue.Count > 0 ? LibraryApi.ToContext(source) : null);
     }
 
     private sealed record PlayerSnapshot(
@@ -373,5 +394,8 @@ public sealed class PlayerApi : IDisposable
         bool HasNext,
         bool HasPrevious,
         bool Shuffle,
-        bool Loop);
+        bool Loop,
+        int QueueVersion,
+        int PoolSize,
+        object? Source);
 }

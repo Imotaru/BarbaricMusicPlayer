@@ -1,8 +1,15 @@
 <script lang="ts">
   import { keymap } from './keymap.svelte'
   import { library, songs } from './library.svelte'
+  import { player } from './player.svelte'
 
-  const titles = { library: 'All songs', suggested: 'Suggested for removal', hidden: 'Hidden songs', missing: 'Missing songs' }
+  const titles = {
+    library: 'All songs',
+    suggested: 'Suggested for removal',
+    hidden: 'Hidden songs',
+    missing: 'Missing songs',
+    playing: 'Now playing',
+  }
   const title = $derived(
     library.view.kind === 'filter' || library.view.kind === 'manual'
       ? (library.playlist?.name ?? '')
@@ -14,8 +21,9 @@
       : songs(library.total),
   )
   const canShufflePlay = $derived(
-    library.loaded && library.total > 0 && !['suggested', 'hidden', 'missing'].includes(library.view.kind),
+    library.loaded && library.total > 0 && !['suggested', 'hidden', 'missing', 'playing'].includes(library.view.kind),
   )
+  const source = $derived(library.view.kind === 'playing' && player.source ? library.describeSource(player.source) : null)
 </script>
 
 <div class="view-header">
@@ -25,6 +33,11 @@
     <svg class="kind" viewBox="0 0 16 16" aria-label="Playlist"><path d="M2 4h9M2 8h9M2 12h6M13 10v5M10.5 12.5h5" /></svg>
   {/if}
   <h1 title={title}>{title}</h1>
+  {#if source}
+    <button class="source" onclick={library.openPlayingSource} title="Open {source.name} as it is now">
+      from <span>{source.name}</span>
+    </button>
+  {/if}
   {#if canShufflePlay}
     <button class="play" onclick={library.playShuffled} aria-label="Shuffle play" title="Shuffle play: start from a random song">
       <svg viewBox="0 0 16 16"><path d="M5 3.5v9l7.5-4.5z" /></svg>
@@ -101,6 +114,31 @@
     white-space: nowrap;
     font-size: 20px;
     font-weight: 650;
+  }
+
+  .source {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  .source span {
+    color: var(--text);
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+    text-underline-offset: 3px;
+  }
+
+  .source:hover span {
+    color: var(--accent);
+    text-decoration-color: currentColor;
   }
 
   .play {

@@ -51,14 +51,14 @@ public sealed class LibraryApi : IDisposable
         bridge.Query("library.getScanStatus", _ => _status);
         bridge.QueryAsync("library.query", async p =>
         {
-            var query = ParseQuery(p);
+            var query = WithPool(ParseQuery(p));
             var offset = p.TryGetProperty("offset", out var o) ? o.GetInt32() : 0;
             var limit = p.TryGetProperty("limit", out var l) ? l.GetInt32() : 200;
             return await Task.Run(() => _tracks.QueryAsync(query, offset, limit));
         });
         bridge.QueryAsync("library.queryIds", async p =>
         {
-            var query = ParseQuery(p);
+            var query = WithPool(ParseQuery(p));
             var offset = p.TryGetProperty("offset", out var o) ? o.GetInt32() : 0;
             var limit = p.TryGetProperty("limit", out var l) ? l.GetInt32() : int.MaxValue;
             return await Task.Run(() => _tracks.QueryIdsAsync(query, offset, limit));
@@ -133,6 +133,18 @@ public sealed class LibraryApi : IDisposable
         return new TrackQuery(text, sort, desc, ParseFilter(p), playlistId, ParseBpmRange(p), scope, keepIds.Count > 0 ? keepIds : null);
     }
 
+    /// <summary>The inverse of <see cref="ParseQuery"/>: a query in the shape the UI sends it.</summary>
+    public static object ToContext(TrackQuery query) => new
+    {
+        query.Text,
+        query.Sort,
+        Desc = query.Descending,
+        query.Filter,
+        query.PlaylistId,
+        query.Bpm,
+        query.Scope,
+    };
+
     /// <summary>Reads a <c>{ min, max, includeUnknown }</c> range; a missing or open one reads as null.</summary>
     public static BpmRange? ParseBpmRange(JsonElement p, string name = "bpm")
     {
@@ -147,6 +159,15 @@ public sealed class LibraryApi : IDisposable
             r.TryGetProperty("includeUnknown", out var u) && u.ValueKind == JsonValueKind.True);
         return range.IsOpen ? null : range;
     }
+
+    /// <summary>
+    /// A query of the songs being played through lists the player's pool as it is right now; the
+    /// list it was drawn from no longer matters.
+    /// </summary>
+    private TrackQuery WithPool(TrackQuery query) =>
+        query.Scope == TrackScope.Playing
+            ? new TrackQuery(query.Text, query.Sort, query.Descending, Scope: TrackScope.Playing, Ids: [.. _controller.Pool])
+            : query;
 
     /// <summary>Reads <c>set: { title, artist, …, trackNumber }</c>: text or null, and numbers or null for year and track.</summary>
     private static Dictionary<TrackField, object?> ParseInfo(JsonElement p)

@@ -50,7 +50,7 @@ export const COMMANDS: Command[] = [
     id: 'library.playShuffled',
     label: 'Shuffle play this list',
     group: 'Playback',
-    when: () => listShown() && library.total > 0 && !['suggested', 'hidden', 'missing'].includes(view()),
+    when: () => listShown() && library.total > 0 && !['suggested', 'hidden', 'missing', 'playing'].includes(view()),
     run: library.playShuffled,
   },
   { id: 'player.openFile', label: 'Open a file…', group: 'Playback', inInputs: true, run: player.openFile },
@@ -107,6 +107,7 @@ export const COMMANDS: Command[] = [
   { id: 'library.resetLens', label: 'Reset BPM range', group: 'Songs', when: () => listShown() && library.lensActive, run: library.resetLens },
 
   { id: 'view.library', label: 'Library', group: 'Go to', when: listShown, run: library.openLibrary },
+  { id: 'view.playing', label: 'Now playing', group: 'Go to', when: () => listShown() && player.source !== null, run: library.openNowPlaying },
   { id: 'view.suggested', label: 'Suggested for removal', group: 'Go to', when: listShown, run: library.openSuggested },
   { id: 'view.hidden', label: 'Hidden songs', group: 'Go to', when: listShown, run: library.openHidden },
   { id: 'view.missing', label: 'Missing songs', group: 'Go to', when: listShown, run: library.openMissing },

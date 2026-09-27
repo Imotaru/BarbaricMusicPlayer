@@ -2,8 +2,8 @@ import { call, hasHost, on } from './bridge'
 import { player } from './player.svelte'
 import { playlists, type Playlist } from './playlists.svelte'
 import {
+  describeView,
   emptyFilter,
-  formatRange,
   fromTrackFilter,
   isEmptyFilter,
   isOpenRange,
@@ -83,7 +83,8 @@ export interface ScanStatus {
 
 /**
  * What the list shows: the whole library, a filter playlist loaded into the controls, a manual
- * playlist, the songs suggested for removal, the hidden ones, or the ones whose file is missing.
+ * playlist, the songs suggested for removal, the hidden ones, the ones whose file is missing, or
+ * the ones the player is going through.
  */
 export type View =
   | { kind: 'library' }
@@ -92,6 +93,20 @@ export type View =
   | { kind: 'suggested' }
   | { kind: 'hidden' }
   | { kind: 'missing' }
+  | { kind: 'playing' }
+
+/** What kind of list the player's songs came from, for picking an icon. */
+export type SourceKind = 'library' | 'tags' | 'search' | 'manual' | 'filter' | 'suggested' | 'hidden'
+
+/** The list the player's songs were drawn from, as the player bar and the Now playing view show it. */
+export interface PlaySource {
+  kind: SourceKind
+  name: string
+  /** The colour of the first tag it is narrowed to, if any. */
+  color: string | null
+  /** The playlist it is, if any. */
+  playlist: Playlist | null
+}
 
 /** How many songs the suggested, hidden and missing views hold, and how many library songs have no tags. */
 export interface LibraryCounts {
@@ -162,6 +177,7 @@ class Library {
   private bpmRefreshTimer: ReturnType<typeof setTimeout> | undefined
   /** Songs tagged while the Untagged list is shown; they stay in it until the list is opened anew. */
   private kept = new Set<number>()
+  private shownQueueVersion = -1
 
   constructor() {
     if (!hasHost) return
@@ -171,6 +187,11 @@ class Library {
       this.refreshCounts()
     })
     on<{ message: string }>('library.error', (e) => (this.error = e.message))
+    // Songs join or leave the Now playing list only when the player draws its queue again.
+    on<{ queueVersion: number }>('player.state', (s) => {
+      if (this.view.kind === 'playing' && s.queueVersion !== this.shownQueueVersion) this.refresh()
+      this.shownQueueVersion = s.queueVersion
+    })
     call<string[]>('library.getFolders').then((f) => (this.folders = f))
     call<ScanStatus>('library.getScanStatus').then((s) => (this.scan = s))
     this.refresh()
@@ -178,6 +199,10 @@ class Library {
   }
 
   get context(): QueryContext {
+    // The songs being played through are what they are: only search and sort apply to them.
+    if (this.view.kind === 'playing') {
+      return { text: this.text, sort: this.sort, desc: this.desc, filter: null, playlistId: null, bpm: null, scope: 'playing' }
+    }
     return {
       text: this.text,
       sort: this.sort,
@@ -192,7 +217,7 @@ class Library {
 
   get scope(): TrackScope {
     const kind = this.view.kind
-    return kind === 'suggested' || kind === 'hidden' || kind === 'missing' ? kind : 'library'
+    return kind === 'suggested' || kind === 'hidden' || kind === 'missing' || kind === 'playing' ? kind : 'library'
   }
 
   get lensActive() {
@@ -201,7 +226,7 @@ class Library {
 
   /** Anything hiding songs from the list: search text, the view's filter, or the BPM lens. */
   get narrowed() {
-    return this.text.trim() !== '' || this.hasFilter || this.lensActive
+    return this.text.trim() !== '' || this.hasFilter || (this.lensActive && this.view.kind !== 'playing')
   }
 
   /** The playlist being shown, if any. */
@@ -279,6 +304,64 @@ class Library {
   /** Shows the library songs that carry no tags yet, such as ones that just arrived. */
   showUntagged = () => this.showFiltered({ ...emptyFilter(), untagged: true })
 
+  /**
+   * Shows the songs the player is going through, in the order of the list they came from, with the
+   * playing one in view. Opening it again scrolls back to the playing song.
+   */
+  openNowPlaying = async () => {
+    if (!player.source) return
+    if (this.view.kind === 'library') this.librarySort = { sort: this.sort, desc: this.desc }
+    if (this.view.kind !== 'playing') {
+      this.view = { kind: 'playing' }
+      this.text = ''
+      this.filter = emptyFilter()
+      this.sort = 'position'
+      this.desc = false
+    }
+    clearTimeout(this.debounce)
+    this.clearForNewList()
+    const listId = this.listId
+    const [, ids] = await Promise.all([
+      this.refresh({ resetScroll: true }),
+      call<number[]>('library.queryIds', this.queryParams()).catch(() => [] as number[]),
+    ])
+    const at = player.trackId === null ? -1 : ids.indexOf(player.trackId)
+    if (listId === this.listId && at >= 0) this.cursor = this.anchor = at
+  }
+
+  /** Opens the list the player's songs were drawn from, as it is now. */
+  openPlayingSource = () => {
+    const source = player.source
+    if (!source) return
+    const playlist = this.describeSource(source).playlist
+    if (playlist) return this.openPlaylist(playlist)
+    if (source.scope === 'suggested') return this.openSuggested()
+    if (source.scope === 'hidden') return this.openHidden()
+    this.view = { kind: 'library' }
+    this.text = source.text ?? ''
+    this.filter = fromTrackFilter(source.filter)
+    ;({ sort: this.sort, desc: this.desc } = source.sort === 'position' ? this.librarySort : source)
+    this.resetList()
+  }
+
+  /** Names the list a queue was drawn from and says what kind it is. */
+  describeSource(source: QueryContext): PlaySource {
+    const filter = fromTrackFilter(source.filter)
+    const color = tags.resolve(filter.include)[0]?.color ?? null
+    const made = (kind: SourceKind, name: string, playlist: Playlist | null = null) => ({ kind, name, color, playlist })
+    if (source.scope === 'suggested') return made('suggested', 'Suggested for removal')
+    if (source.scope === 'hidden') return made('hidden', 'Hidden songs')
+    if (source.playlistId !== null) {
+      const playlist = playlists.byId.get(source.playlistId) ?? null
+      return made('manual', playlist?.name ?? 'A deleted playlist', playlist)
+    }
+    const saved = playlists.list.find((p) => p.kind === 'filter' && p.query && sameView(source, p.query))
+    if (saved) return made('filter', saved.name, saved)
+    const name = describeView(filter, source.text ?? '', source.bpm, (ids) => tags.resolve(ids).map((t) => t.name))
+    if (!name) return made('library', 'All songs')
+    return made(isEmptyFilter(filter) ? 'search' : 'tags', name)
+  }
+
   /** Throws away edits to the open filter playlist. */
   revert = () => {
     if (this.view.kind !== 'filter' || !this.playlist) return
@@ -315,7 +398,7 @@ class Library {
   }
 
   setSort(key: SortKey) {
-    if (key === 'position' && this.view.kind !== 'manual') return
+    if (key === 'position' && this.view.kind !== 'manual' && this.view.kind !== 'playing') return
     if (this.sort === key) this.desc = !this.desc
     else {
       this.sort = key
@@ -519,14 +602,15 @@ class Library {
     const row = this.row(index)
     if (!row) return
     this.cursor = index
-    // A missing song has no file to play.
-    if (this.view.kind !== 'missing') player.playTrack(row.id, this.context)
+    // A missing song has no file to play; one the player is going through plays without starting the list over.
+    if (this.view.kind === 'playing') player.playFromPool(row.id)
+    else if (this.view.kind !== 'missing') player.playTrack(row.id, this.context)
   }
 
   playSelected = () => this.playIndex(this.cursor)
 
   playShuffled = () => {
-    if (this.total > 0 && this.view.kind !== 'missing') player.playShuffled(this.context)
+    if (this.total > 0 && this.view.kind !== 'missing' && this.view.kind !== 'playing') player.playShuffled(this.context)
   }
 
   /** Takes the selected songs out of the manual playlist being shown. */
@@ -747,18 +831,8 @@ class Library {
 
   /** A name for a saved view, from its tags, BPM range and search text: "chill + party −live 120–130 BPM “beat”". */
   private suggestName() {
-    const range = withLens(this.context.filter, this.context.bpm)
     const names = (ids: number[]) => tags.resolve(ids).map((t) => t.name)
-    const parts = [
-      this.filter.untagged ? 'Untagged' : '',
-      names(this.filter.include).join(this.filter.mode === 'all' ? ' + ' : ' / '),
-      names(this.filter.exclude)
-        .map((n) => `−${n}`)
-        .join(' '),
-      range && !isOpenRange({ min: range.bpmMin, max: range.bpmMax }) ? `${formatRange(range.bpmMin, range.bpmMax)} BPM` : '',
-      this.text.trim() ? `“${this.text.trim()}”` : '',
-    ].filter(Boolean)
-    return parts.join(' ') || 'New playlist'
+    return describeView(this.filter, this.text, this.context.bpm, names) || 'New playlist'
   }
 
   private clearForNewList() {

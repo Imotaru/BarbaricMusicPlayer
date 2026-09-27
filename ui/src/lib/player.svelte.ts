@@ -22,6 +22,12 @@ export interface PlayerSnapshot {
   hasPrevious: boolean
   shuffle: boolean
   loop: boolean
+  /** Changes whenever the queue or its pool does. */
+  queueVersion: number
+  /** How many songs the player is going through. */
+  poolSize: number
+  /** The list those songs were drawn from; null for a song played on its own. */
+  source: QueryContext | null
 }
 
 export const GAIN_MIN_DB = -24
@@ -46,6 +52,9 @@ class Player {
   hasPrevious = $state(false)
   shuffle = $state(false)
   loop = $state(false)
+  queueVersion = $state(0)
+  poolSize = $state(0)
+  source = $state<QueryContext | null>(null)
   error = $state<string | null>(null)
 
   constructor() {
@@ -67,6 +76,9 @@ class Player {
     })
 
   playTrack = (id: number, context: QueryContext) => this.run(() => call('player.playTrack', { id, context }))
+
+  /** Plays one of the songs being played through; the queue carries on around it. */
+  playFromPool = (id: number) => this.run(() => call('player.playFromPool', { id }))
 
   /** Turns shuffle on and plays the list from a song shuffle picks, so nothing has to be skipped. */
   playShuffled = (context: QueryContext) => {
@@ -145,6 +157,9 @@ class Player {
     this.hasPrevious = s.hasPrevious
     this.shuffle = s.shuffle
     this.loop = s.loop
+    this.queueVersion = s.queueVersion
+    this.poolSize = s.poolSize
+    this.source = s.source
   }
 
   private async run(action: () => Promise<unknown>) {

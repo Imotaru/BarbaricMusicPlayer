@@ -2,8 +2,12 @@
 
 export type SortKey = 'artist' | 'title' | 'album' | 'duration' | 'bpm' | 'added' | 'plays' | 'skips' | 'position'
 
-/** Which part of the library a query looks at: visible songs, the ones suggested for removal, hidden ones, or missing ones. */
-export type TrackScope = 'library' | 'suggested' | 'hidden' | 'missing'
+/**
+ * Which part of the library a query looks at: visible songs, the ones suggested for removal, hidden
+ * ones, missing ones, or the ones the player is going through (its pool, in the order of the list it
+ * was drawn from, which the 'position' sort follows).
+ */
+export type TrackScope = 'library' | 'suggested' | 'hidden' | 'missing' | 'playing'
 
 /** Tag and BPM constraints. Empty lists and nulls mean "no constraint". */
 export interface TrackFilter {
@@ -121,6 +125,25 @@ export function withLens(filter: TrackFilter | null, lens: BpmRange | null): Tra
     bpmMax: pick(f.bpmMax, lens.max, Math.min),
     includeUnknownBpm: lens.includeUnknown && (!own || f.includeUnknownBpm),
   }
+}
+
+/**
+ * Names a view from its tags, BPM range and search text: "chill + party −live 120–130 BPM “beat”",
+ * or '' when nothing narrows it. The BPM lens counts as the view's own range.
+ */
+export function describeView(filter: TagFilter, text: string, lens: BpmRange | null, tagNames: (ids: number[]) => string[]) {
+  const range = withLens(toTrackFilter(filter), lens)
+  return [
+    filter.untagged ? 'Untagged' : '',
+    tagNames(filter.include).join(filter.mode === 'all' ? ' + ' : ' / '),
+    tagNames(filter.exclude)
+      .map((n) => `−${n}`)
+      .join(' '),
+    range && !isOpenRange({ min: range.bpmMin, max: range.bpmMax }) ? `${formatRange(range.bpmMin, range.bpmMax)} BPM` : '',
+    text.trim() ? `“${text.trim()}”` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 export function fromTrackFilter(f: Partial<TrackFilter> | null | undefined): TagFilter {
