@@ -99,6 +99,8 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
   - Right-click songs to **Edit skips…** (set the count by hand) or **Clear skips**. Plays are left alone, and the song joins or leaves Suggested for removal to match.
 - **Smart shuffle:** press S (or the shuffle button) to shuffle the list you're playing from, without repeats.
   - Songs you tend to skip come up later, and so do songs you heard in the last day or so.
+  - Long songs come up less often, in proportion to their length.
+  - Settings → Playback can turn off the skip and length weighting.
   - Nothing is ruled out: even a song you always skip still turns up now and then.
   - The playing song carries on when shuffle is switched on or off.
 - **Suggested for removal:** a song you have skipped at least 5 times, and most of the times it came on, shows up in this sidebar view. For each one you can:

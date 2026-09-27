@@ -93,6 +93,12 @@ public sealed class PlaybackController : IDisposable
     public bool WeighByLength { get; set; } = true;
 
     /// <summary>
+    /// When on, shuffle brings songs the user tends to skip up later. Applies from the next shuffle;
+    /// see <see cref="ReshuffleAsync"/>.
+    /// </summary>
+    public bool WeighBySkips { get; set; } = true;
+
+    /// <summary>
     /// Whether Next has somewhere to go. A list always does: after its last song it starts over.
     /// </summary>
     public bool HasNext => Queue.HasNext || (_queueSource is not null && Queue.Count > 0);
@@ -441,7 +447,7 @@ public sealed class PlaybackController : IDisposable
             songs = SmartShuffle.ThinByLength(songs, SmartShuffle.ReferenceLengthMs(list), _random);
         }
 
-        return SmartShuffle.Order(songs, _clock.GetUtcNow(), _random);
+        return SmartShuffle.Order(songs, _clock.GetUtcNow(), _random, WeighBySkips);
     }
 
     private async Task RebuildQueueAsync(IReadOnlyList<long> played)

@@ -39,6 +39,7 @@ public sealed class PlayerApi : IDisposable
     internal const string LoopTrackKey = "loopTrack";
     internal const string NormalizeKey = "normalize";
     internal const string WeighByLengthKey = "weighByLength";
+    internal const string WeighBySkipsKey = "weighBySkips";
 
     private readonly AudioEngine _engine;
     private readonly PlaybackController _controller;
@@ -72,6 +73,7 @@ public sealed class PlayerApi : IDisposable
         _controller.LoopTrack = settings.Get<bool?>(LoopTrackKey) ?? false;
         _engine.Normalize = settings.Get<bool?>(NormalizeKey) ?? true;
         _controller.WeighByLength = settings.Get<bool?>(WeighByLengthKey) ?? true;
+        _controller.WeighBySkips = settings.Get<bool?>(WeighBySkipsKey) ?? true;
 
         bridge.Query("player.getState", _ => Snapshot());
         bridge.QueryAsync("player.openFile", async _ => await OpenFileAsync());
@@ -104,6 +106,7 @@ public sealed class PlayerApi : IDisposable
         bridge.Command("player.setLoop", p => SetLoop(p.GetProperty("on").GetBoolean()));
         bridge.Command("player.setNormalize", p => SetNormalize(p.GetProperty("on").GetBoolean()));
         bridge.CommandAsync("player.setWeighByLength", p => SetWeighByLengthAsync(p.GetProperty("on").GetBoolean()));
+        bridge.CommandAsync("player.setWeighBySkips", p => SetWeighBySkipsAsync(p.GetProperty("on").GetBoolean()));
         bridge.Command("player.seek", p => Seek(TimeSpan.FromSeconds(p.GetProperty("seconds").GetDouble())));
         bridge.CommandAsync("player.setTrackGain", async p =>
         {
@@ -215,6 +218,22 @@ public sealed class PlayerApi : IDisposable
         if (_controller.WeighByLength != on)
         {
             _controller.WeighByLength = on;
+            await _controller.ReshuffleAsync();
+        }
+
+        EmitState();
+    }
+
+    /// <summary>
+    /// Makes shuffle bring songs the user tends to skip up later. On unless turned off; remembered
+    /// across sessions. The songs still to come in shuffle are picked again.
+    /// </summary>
+    public async Task SetWeighBySkipsAsync(bool on)
+    {
+        _settings.Save(WeighBySkipsKey, on);
+        if (_controller.WeighBySkips != on)
+        {
+            _controller.WeighBySkips = on;
             await _controller.ReshuffleAsync();
         }
 
@@ -392,6 +411,7 @@ public sealed class PlayerApi : IDisposable
             _controller.CurrentTrack is { LoudnessAnalyzed: true } ? _engine.AutoGainDb : null,
             _engine.Normalize,
             _controller.WeighByLength,
+            _controller.WeighBySkips,
             _engine.MasterVolume,
             _engine.VolumeLimit,
             _controller.HasNext,
@@ -416,6 +436,7 @@ public sealed class PlayerApi : IDisposable
         double? AutoGainDb,
         bool Normalize,
         bool WeighByLength,
+        bool WeighBySkips,
         float Volume,
         float VolumeLimit,
         bool HasNext,

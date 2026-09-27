@@ -4,9 +4,10 @@ namespace Barbaric.Core.Playback;
 public readonly record struct ShuffleStats(long Id, long PlayCount, long SkipCount, long? LastPlayedUtc, long DurationMs = 0);
 
 /// <summary>
-/// Shuffles so that songs the user tends to skip, and songs heard recently, come up later. Nothing
-/// is ever ruled out: every weight is at least <see cref="MinWeight"/>. Optionally, long songs are
-/// left out of some passes through a list (<see cref="ThinByLength"/>) so they come up less often.
+/// Shuffles so that songs heard recently, and (unless turned off) songs the user tends to skip,
+/// come up later. Nothing is ever ruled out: every weight is at least <see cref="MinWeight"/>.
+/// Optionally, long songs are left out of some passes through a list (<see cref="ThinByLength"/>)
+/// so they come up less often.
 /// </summary>
 public static class SmartShuffle
 {
@@ -21,9 +22,10 @@ public static class SmartShuffle
     /// <summary>Songs shorter than this count as this long, so a short interlude doesn't crowd out everything else.</summary>
     public static readonly TimeSpan ShortestLength = TimeSpan.FromSeconds(30);
 
-    public static double Weight(ShuffleStats song, DateTimeOffset now)
+    /// <param name="weighBySkips">When off, how often the song was skipped doesn't matter.</param>
+    public static double Weight(ShuffleStats song, DateTimeOffset now, bool weighBySkips = true)
     {
-        var liked = 1 - Listening.SmoothedSkipRatio(song.PlayCount, song.SkipCount);
+        var liked = weighBySkips ? 1 - Listening.SmoothedSkipRatio(song.PlayCount, song.SkipCount) : 1;
         var recency = 1.0;
         if (song.LastPlayedUtc is { } ticks)
         {
@@ -38,9 +40,9 @@ public static class SmartShuffle
     /// Weighted random order without replacement (Efraimidis–Spirakis): each song draws the key
     /// u^(1/w), and sorting by key descending picks heavier songs earlier.
     /// </summary>
-    public static List<long> Order(IEnumerable<ShuffleStats> songs, DateTimeOffset now, Random random) =>
+    public static List<long> Order(IEnumerable<ShuffleStats> songs, DateTimeOffset now, Random random, bool weighBySkips = true) =>
         songs
-            .Select(song => (song.Id, Key: Math.Log(1 - random.NextDouble()) / Weight(song, now)))
+            .Select(song => (song.Id, Key: Math.Log(1 - random.NextDouble()) / Weight(song, now, weighBySkips)))
             .OrderByDescending(entry => entry.Key)
             .Select(entry => entry.Id)
             .ToList();

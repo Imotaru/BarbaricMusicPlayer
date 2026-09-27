@@ -432,6 +432,28 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Shuffle_WithTheSkipWeightingOff_TreatsOftenSkippedSongsLikeTheRest()
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            await _library.Stats.RecordAsync(_ids["A"], 0, 5000, PlayKind.Skip);
+            await _library.Stats.RecordAsync(_ids["C"], 5000, 5000, PlayKind.Complete);
+        }
+
+        _library.Clock.Advance(TimeSpan.FromDays(30));
+        _controller.WeighBySkips = false;
+        await _controller.SetShuffleAsync(true);
+        var lastA = 0;
+        for (var i = 0; i < 50; i++)
+        {
+            await _controller.PlayTrackAsync(_ids["B"], ByTitle);
+            lastA += _controller.Queue.Ids[^1] == _ids["A"] ? 1 : 0;
+        }
+
+        Assert.InRange(lastA, 15, 35);
+    }
+
+    [Fact]
     public async Task Shuffle_LeavesLongSongsOutOfSomePasses()
     {
         // A, B and C are 5 s, so they count as 30 s; D at 5 minutes makes it into one pass in ten.

@@ -38,6 +38,20 @@ public class SmartShuffleTests
     }
 
     [Fact]
+    public void Weight_IgnoresSkips_WhenTurnedOff_ButNotRecency()
+    {
+        var loved = SmartShuffle.Weight(new ShuffleStats(1, 20, 0, null), Now, weighBySkips: false);
+        var fresh = SmartShuffle.Weight(new ShuffleStats(2, 0, 0, null), Now, weighBySkips: false);
+        var hated = SmartShuffle.Weight(new ShuffleStats(3, 0, 200, null), Now, weighBySkips: false);
+        var justNow = SmartShuffle.Weight(new ShuffleStats(4, 0, 200, Now.UtcTicks), Now, weighBySkips: false);
+
+        Assert.Equal(1, loved);
+        Assert.Equal(loved, fresh);
+        Assert.Equal(loved, hated);
+        Assert.True(justNow < hated);
+    }
+
+    [Fact]
     public void Weight_IsLowerForSongsPlayedRecently_AndRecovers()
     {
         long HoursAgo(double hours) => (Now - TimeSpan.FromHours(hours)).UtcTicks;

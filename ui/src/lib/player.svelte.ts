@@ -17,6 +17,7 @@ export interface PlayerSnapshot {
   autoGainDb: number | null
   normalize: boolean
   weighByLength: boolean
+  weighBySkips: boolean
   volume: number
   /** The top of the master volume slider; the volume never goes above it. */
   volumeLimit: number
@@ -53,6 +54,7 @@ class Player {
   autoGainDb = $state<number | null>(null)
   normalize = $state(true)
   weighByLength = $state(true)
+  weighBySkips = $state(true)
   volume = $state(1)
   volumeLimit = $state(1)
   hasNext = $state(false)
@@ -139,6 +141,12 @@ class Player {
     this.run(() => call('player.setWeighByLength', { on }))
   }
 
+  /** Makes shuffle bring songs you tend to skip up later. */
+  setWeighBySkips = (on: boolean) => {
+    this.weighBySkips = on
+    this.run(() => call('player.setWeighBySkips', { on }))
+  }
+
   setVolume = (volume: number) => {
     this.volume = Math.min(Math.max(volume, 0), this.volumeLimit)
     this.run(() => call('player.setVolume', { volume: this.volume }))
@@ -170,6 +178,7 @@ class Player {
     this.autoGainDb = s.autoGainDb
     this.normalize = s.normalize
     this.weighByLength = s.weighByLength
+    this.weighBySkips = s.weighBySkips
     this.volume = s.volume
     this.volumeLimit = s.volumeLimit
     this.hasNext = s.hasNext

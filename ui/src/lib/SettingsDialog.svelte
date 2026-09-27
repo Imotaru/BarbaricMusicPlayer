@@ -230,6 +230,13 @@
         <section>
           <h3>Shuffle</h3>
           <label class="check">
+            <input type="checkbox" checked={player.weighBySkips} onchange={(e) => player.setWeighBySkips(e.currentTarget.checked)} />
+            Play songs I skip less often
+          </label>
+          <p class="intro">
+            Songs you tend to skip come up later in the shuffle. Even a song you always skip still turns up now and then.
+          </p>
+          <label class="check">
             <input type="checkbox" checked={player.weighByLength} onchange={(e) => player.setWeighByLength(e.currentTarget.checked)} />
             Play long songs less often
           </label>

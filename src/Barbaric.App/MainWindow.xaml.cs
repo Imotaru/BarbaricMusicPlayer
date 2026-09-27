@@ -244,6 +244,11 @@ public partial class MainWindow : Window
             _ = _player?.SetWeighByLengthAsync(weigh.GetBoolean());
         }
 
+        if (settings.TryGetValue(PlayerApi.WeighBySkipsKey, out var skips) && skips.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            _ = _player?.SetWeighBySkipsAsync(skips.GetBoolean());
+        }
+
         if (settings.TryGetValue(GlobalHotkeys.SettingsKey, out var hotkeys) && hotkeys.ValueKind == JsonValueKind.Object)
         {
             _hotkeys.ReplaceAll(hotkeys.EnumerateObject()
