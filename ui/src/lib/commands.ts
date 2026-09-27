@@ -42,8 +42,8 @@ export const COMMANDS: Command[] = [
   { id: 'player.seekBack', label: 'Back 5 seconds', group: 'Playback', global: true, run: () => player.seekBy(-5) },
   { id: 'player.seekForwardLong', label: 'Forward 30 seconds', group: 'Playback', run: () => player.seekBy(30) },
   { id: 'player.seekBackLong', label: 'Back 30 seconds', group: 'Playback', run: () => player.seekBy(-30) },
-  { id: 'player.volumeUp', label: 'Volume up', group: 'Playback', global: true, run: () => player.changeVolume(0.05) },
-  { id: 'player.volumeDown', label: 'Volume down', group: 'Playback', global: true, run: () => player.changeVolume(-0.05) },
+  { id: 'player.volumeUp', label: 'Volume up', group: 'Playback', global: true, run: () => player.stepVolume(1) },
+  { id: 'player.volumeDown', label: 'Volume down', group: 'Playback', global: true, run: () => player.stepVolume(-1) },
   { id: 'player.shuffle', label: 'Shuffle on / off', group: 'Playback', global: true, run: player.toggleShuffle },
   { id: 'player.loop', label: 'Loop song on / off', group: 'Playback', global: true, run: player.toggleLoop },
   {

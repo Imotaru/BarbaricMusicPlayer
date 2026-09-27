@@ -136,6 +136,30 @@ public sealed class AudioEngineTests : IDisposable
     }
 
     [Fact]
+    public void MasterVolume_CannotExceedTheVolumeLimit()
+    {
+        _engine.VolumeLimit = 0.3f;
+        _engine.MasterVolume = 0.8f;
+
+        Assert.Equal(0.3f, _engine.MasterVolume);
+    }
+
+    [Fact]
+    public void LoweringTheVolumeLimit_TurnsTheVolumeDown_RaisingItLeavesTheVolume()
+    {
+        _engine.MasterVolume = 0.5f;
+
+        _engine.VolumeLimit = 0.1f;
+        Assert.Equal(0.1f, _engine.MasterVolume);
+
+        _engine.VolumeLimit = 1f;
+        Assert.Equal(0.1f, _engine.MasterVolume);
+
+        _engine.VolumeLimit = 0f;
+        Assert.Equal(AudioEngine.MinVolumeLimit, _engine.VolumeLimit);
+    }
+
+    [Fact]
     public async Task LoadingWhileDeviceStarts_DiscardsTheStaleDevice()
     {
         var slowDevice = new TaskCompletionSource<IWavePlayer>();

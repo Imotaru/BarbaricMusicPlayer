@@ -18,6 +18,8 @@ export interface PlayerSnapshot {
   normalize: boolean
   weighByLength: boolean
   volume: number
+  /** The top of the master volume slider; the volume never goes above it. */
+  volumeLimit: number
   hasNext: boolean
   hasPrevious: boolean
   shuffle: boolean
@@ -32,6 +34,10 @@ export interface PlayerSnapshot {
 
 export const GAIN_MIN_DB = -24
 export const GAIN_MAX_DB = 12
+export const VOLUME_LIMIT_MIN = 0.01
+
+/** A master volume as a percent of full volume, with a decimal only when it has one: 30%, 7.5%. */
+export const formatVolume = (volume: number) => `${Math.round(volume * 1000) / 10}%`
 
 /** Reactive mirror of the host's playback state. All mutations go through the host. */
 class Player {
@@ -48,6 +54,7 @@ class Player {
   normalize = $state(true)
   weighByLength = $state(true)
   volume = $state(1)
+  volumeLimit = $state(1)
   hasNext = $state(false)
   hasPrevious = $state(false)
   shuffle = $state(false)
@@ -133,11 +140,22 @@ class Player {
   }
 
   setVolume = (volume: number) => {
-    this.volume = Math.min(Math.max(volume, 0), 1)
+    this.volume = Math.min(Math.max(volume, 0), this.volumeLimit)
     this.run(() => call('player.setVolume', { volume: this.volume }))
   }
 
-  changeVolume = (delta: number) => this.setVolume(Math.round((this.volume + delta) * 100) / 100)
+  /** Turns the volume up or down by steps of a twentieth of the limit, the same as the host's global hotkeys. */
+  stepVolume = (steps: number) => {
+    const step = this.volumeLimit / 20
+    this.setVolume(Math.round((this.volume + steps * step) / step) * step)
+  }
+
+  /** Sets the top of the master volume slider; a volume above it comes down to it. */
+  setVolumeLimit = (limit: number) => {
+    this.volumeLimit = Math.min(Math.max(limit, VOLUME_LIMIT_MIN), 1)
+    this.volume = Math.min(this.volume, this.volumeLimit)
+    this.run(() => call('player.setVolumeLimit', { limit: this.volumeLimit }))
+  }
 
   private apply(s: PlayerSnapshot) {
     this.state = s.state
@@ -153,6 +171,7 @@ class Player {
     this.normalize = s.normalize
     this.weighByLength = s.weighByLength
     this.volume = s.volume
+    this.volumeLimit = s.volumeLimit
     this.hasNext = s.hasNext
     this.hasPrevious = s.hasPrevious
     this.shuffle = s.shuffle

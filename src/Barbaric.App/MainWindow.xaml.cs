@@ -218,9 +218,15 @@ public partial class MainWindow : Window
             RefreshInitialScript();
         }
 
+        // The limit first, so it doesn't clamp a volume that already fits under it.
+        if (settings.TryGetValue(PlayerApi.VolumeLimitKey, out var limit) && limit.ValueKind == JsonValueKind.Number)
+        {
+            _player?.SetVolumeLimit(limit.GetDouble());
+        }
+
         if (settings.TryGetValue(PlayerApi.VolumeKey, out var volume) && volume.ValueKind == JsonValueKind.Number)
         {
-            _player?.SetVolume(Math.Clamp(volume.GetDouble(), 0, 1));
+            _player?.SetVolume(volume.GetDouble());
         }
 
         if (settings.TryGetValue(PlayerApi.LoopTrackKey, out var loop) && loop.ValueKind is JsonValueKind.True or JsonValueKind.False)
@@ -278,8 +284,8 @@ public partial class MainWindow : Window
             case GlobalHotkeys.Loop: player.ToggleLoop(); break;
             case GlobalHotkeys.SeekForward: player.SeekBy(5); break;
             case GlobalHotkeys.SeekBack: player.SeekBy(-5); break;
-            case GlobalHotkeys.VolumeUp: player.ChangeVolume(0.05); break;
-            case GlobalHotkeys.VolumeDown: player.ChangeVolume(-0.05); break;
+            case GlobalHotkeys.VolumeUp: player.StepVolume(1); break;
+            case GlobalHotkeys.VolumeDown: player.StepVolume(-1); break;
         }
     }
 

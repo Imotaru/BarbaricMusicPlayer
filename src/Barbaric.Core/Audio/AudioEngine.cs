@@ -21,6 +21,7 @@ public sealed class AudioEngine : IDisposable
     private double _autoGainDb;
     private bool _normalize = true;
     private float _masterVolume = 1f;
+    private float _volumeLimit = 1f;
 
     /// <summary>
     /// Plays through the default Windows device and follows it when it changes
@@ -100,16 +101,32 @@ public sealed class AudioEngine : IDisposable
         }
     }
 
-    /// <summary>Master volume, 0..1, applied on top of the track gain.</summary>
+    /// <summary>Master volume, 0..<see cref="VolumeLimit"/>, applied on top of the track gain.</summary>
     public float MasterVolume
     {
         get => _masterVolume;
         set
         {
-            _masterVolume = Math.Clamp(value, 0f, 1f);
+            _masterVolume = Math.Clamp(value, 0f, _volumeLimit);
             ApplyGain();
         }
     }
+
+    /// <summary>The highest <see cref="MasterVolume"/> can go, 0.01..1. Lowering it below the volume turns the volume down to it.</summary>
+    public float VolumeLimit
+    {
+        get => _volumeLimit;
+        set
+        {
+            _volumeLimit = Math.Clamp(value, MinVolumeLimit, 1f);
+            if (_masterVolume > _volumeLimit)
+            {
+                MasterVolume = _volumeLimit;
+            }
+        }
+    }
+
+    public const float MinVolumeLimit = 0.01f;
 
     public void Load(string path, double trackGainDb = 0, double autoGainDb = 0)
     {

@@ -97,6 +97,13 @@
   /** In-app chords that a global hotkey takes over: the system delivers those to the hotkey, never to the page. */
   const shadowed = $derived(new Set(keymap.globals.map((g) => g.keys).filter((k): k is string => k !== null)))
 
+  function setVolumeLimit(e: Event & { currentTarget: HTMLInputElement }) {
+    const percent = e.currentTarget.valueAsNumber
+    if (Number.isFinite(percent)) player.setVolumeLimit(Math.round(percent) / 100)
+    // Shows what was kept, also when a typed value was out of range or unchanged after clamping.
+    e.currentTarget.value = String(Math.round(player.volumeLimit * 100))
+  }
+
   const isRecording = (command: Command, global: boolean) =>
     recording?.id === command.id && recording.global === global
 </script>
@@ -202,6 +209,22 @@
             Each song's volume is measured once, in the background, by how loud its loud parts get, so a quiet intro
             doesn't fool it. Quiet songs are only turned up as far as they can go without distorting. The Song slider
             still adjusts a song from there.
+          </p>
+          <label class="limit">
+            Highest volume
+            <input
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+              value={Math.round(player.volumeLimit * 100)}
+              onchange={setVolumeLimit}
+            />
+            %
+          </label>
+          <p class="intro">
+            The Master slider goes up to this, so the volumes you use get the whole slider. Volume keys step in
+            proportion.
           </p>
         </section>
         <section>
@@ -514,6 +537,31 @@
     gap: 8px;
     margin-bottom: 8px;
     font-size: 13px;
+  }
+
+  .limit {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .limit input {
+    width: 56px;
+    height: 26px;
+    margin-left: 4px;
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+  }
+
+  .limit input:focus {
+    outline: 0;
+    border-color: var(--accent);
   }
 
   .check input {

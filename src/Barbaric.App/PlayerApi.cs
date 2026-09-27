@@ -35,6 +35,7 @@ public sealed class PlayerApi : IDisposable
     private const string QueueKey = "queue";
     private const string QueuePositionKey = "queuePos";
     internal const string VolumeKey = "volume";
+    internal const string VolumeLimitKey = "volumeLimit";
     internal const string LoopTrackKey = "loopTrack";
     internal const string NormalizeKey = "normalize";
     internal const string WeighByLengthKey = "weighByLength";
@@ -56,6 +57,12 @@ public sealed class PlayerApi : IDisposable
         _settings = settings;
         _owner = owner;
         _dispatcher = owner.Dispatcher;
+
+        // The limit first, so it doesn't clamp a volume that already fits under it.
+        if (settings.Get<float?>(VolumeLimitKey) is { } limit)
+        {
+            _engine.VolumeLimit = limit;
+        }
 
         if (settings.Get<float?>(VolumeKey) is { } volume)
         {
@@ -104,6 +111,7 @@ public sealed class PlayerApi : IDisposable
             EmitState();
         });
         bridge.Command("player.setVolume", p => SetVolume(p.GetProperty("volume").GetDouble()));
+        bridge.Command("player.setVolumeLimit", p => SetVolumeLimit(p.GetProperty("limit").GetDouble()));
 
         // Engine events can arrive on the audio thread; hop to the UI thread before touching anything.
         _engine.StateChanged += OnEngineStateChanged;
@@ -232,7 +240,24 @@ public sealed class PlayerApi : IDisposable
         EmitState();
     }
 
-    public void ChangeVolume(double delta) => SetVolume(_engine.MasterVolume + delta);
+    /// <summary>
+    /// The top of the master volume slider, so the range the user actually uses gets all of it.
+    /// Turns the volume down if it's above. Remembered across sessions.
+    /// </summary>
+    public void SetVolumeLimit(double limit)
+    {
+        _engine.VolumeLimit = (float)limit;
+        _settings.Save(VolumeLimitKey, _engine.VolumeLimit);
+        _settings.Save(VolumeKey, _engine.MasterVolume);
+        EmitState();
+    }
+
+    /// <summary>Turns the volume up or down by steps of a twentieth of the limit, as the UI's volume keys do.</summary>
+    public void StepVolume(int steps)
+    {
+        var step = _engine.VolumeLimit / 20;
+        SetVolume(Math.Round((_engine.MasterVolume + steps * step) / step) * step);
+    }
 
     /// <summary>
     /// Runs a command that didn't come from the UI (media keys, taskbar, hotkeys), reporting a
@@ -368,6 +393,7 @@ public sealed class PlayerApi : IDisposable
             _engine.Normalize,
             _controller.WeighByLength,
             _engine.MasterVolume,
+            _engine.VolumeLimit,
             _controller.HasNext,
             _controller.Queue.HasPrevious,
             _controller.Shuffle,
@@ -391,6 +417,7 @@ public sealed class PlayerApi : IDisposable
         bool Normalize,
         bool WeighByLength,
         float Volume,
+        float VolumeLimit,
         bool HasNext,
         bool HasPrevious,
         bool Shuffle,

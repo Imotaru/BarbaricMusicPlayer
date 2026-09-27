@@ -2,7 +2,7 @@
   import { call, hasHost } from './bridge'
   import { keymap } from './keymap.svelte'
   import { library } from './library.svelte'
-  import { formatTime, player } from './player.svelte'
+  import { formatTime, formatVolume, player } from './player.svelte'
   import { ui } from './ui.svelte'
 
   let scrubbing = $state<number | null>(null)
@@ -12,16 +12,16 @@
   const playOrToggle = () => (player.loaded ? player.toggle() : library.playSelected())
 
   // What unmuting goes back to.
-  let unmutedVolume = 1
+  let unmutedVolume = 0
   const toggleMute = () => {
     if (player.volume > 0) {
       unmutedVolume = player.volume
       player.setVolume(0)
     } else {
-      player.setVolume(unmutedVolume || 1)
+      player.setVolume(unmutedVolume || player.volumeLimit)
     }
   }
-  const volumeTitle = $derived(`Master volume ${Math.round(player.volume * 100)}% — scroll to adjust`)
+  const volumeTitle = $derived(`Master volume ${formatVolume(player.volume)} — scroll to adjust`)
 </script>
 
 <!-- The whole mini-player drags the window; its controls opt out. -->
@@ -35,7 +35,7 @@
         <p class="title dim">Nothing playing</p>
       {/if}
     </div>
-    <div class="volume" title={volumeTitle} onwheel={(e) => player.changeVolume(e.deltaY < 0 ? 0.05 : -0.05)}>
+    <div class="volume" title={volumeTitle} onwheel={(e) => player.stepVolume(e.deltaY < 0 ? 1 : -1)}>
       <button aria-label={player.volume > 0 ? 'Mute' : 'Unmute'} onclick={toggleMute}>
         <svg viewBox="0 0 24 24">
           <path class="body" d="M4 9h4l5-4v14l-5-4H4z" />
@@ -43,7 +43,7 @@
             <path d="M16 9.5l5 5M21 9.5l-5 5" />
           {:else}
             <path d="M16 9.5a3.5 3.5 0 0 1 0 5" />
-            {#if player.volume > 0.5}
+            {#if player.volume > player.volumeLimit / 2}
               <path d="M18.5 7a7 7 0 0 1 0 10" />
             {/if}
           {/if}
@@ -52,11 +52,11 @@
       <input
         type="range"
         min="0"
-        max="1"
-        step="0.01"
+        max={player.volumeLimit}
+        step={player.volumeLimit / 100}
         value={player.volume}
         oninput={(e) => player.setVolume(e.currentTarget.valueAsNumber)}
-        style:--progress="{player.volume * 100}%"
+        style:--progress="{(player.volume / player.volumeLimit) * 100}%"
         aria-label="Master volume"
       />
     </div>

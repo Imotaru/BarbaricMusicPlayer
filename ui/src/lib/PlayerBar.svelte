@@ -1,7 +1,7 @@
 <script lang="ts">
   import { keymap } from './keymap.svelte'
   import { library, songs } from './library.svelte'
-  import { GAIN_MAX_DB, GAIN_MIN_DB, formatGain, formatTime, player } from './player.svelte'
+  import { GAIN_MAX_DB, GAIN_MIN_DB, formatGain, formatTime, formatVolume, player } from './player.svelte'
 
   // While dragging the seek bar, show the drag position instead of live playback position.
   let scrubbing = $state<number | null>(null)
@@ -159,13 +159,13 @@ Adjusts on top of the automatic level (${auto}) that evens it out with other son
       <input
         type="range"
         min="0"
-        max="1"
-        step="0.01"
+        max={player.volumeLimit}
+        step={player.volumeLimit / 100}
         value={player.volume}
         oninput={(e) => player.setVolume(e.currentTarget.valueAsNumber)}
-        style:--progress="{player.volume * 100}%"
+        style:--progress="{(player.volume / player.volumeLimit) * 100}%"
       />
-      <output>{Math.round(player.volume * 100)}%</output>
+      <output>{formatVolume(player.volume)}</output>
     </label>
   </div>
 </footer>
