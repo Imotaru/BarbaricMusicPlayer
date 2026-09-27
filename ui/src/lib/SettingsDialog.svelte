@@ -194,6 +194,18 @@
         </section>
 
         <section>
+          <h3>Song list</h3>
+          <label class="check">
+            <input type="checkbox" checked={prefs.showSkips} onchange={(e) => prefs.setShowSkips(e.currentTarget.checked)} />
+            Show how often songs were skipped
+          </label>
+          <p class="intro">
+            Turn this off to hide the Skips column. Suggested for removal still shows it, since that's what the list is
+            about.
+          </p>
+        </section>
+
+        <section>
           <h3>Mini player</h3>
           <p class="intro">Drag the mini player's edges to resize it; it keeps that size.</p>
           <button class="action" disabled={!ui.compactResized} onclick={ui.resetCompactSize}>Reset mini player size</button>

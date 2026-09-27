@@ -6,6 +6,7 @@
   import { library, type SortKey } from './library.svelte'
   import { keymap } from './keymap.svelte'
   import { formatTime, player } from './player.svelte'
+  import { prefs } from './prefs.svelte'
   import { formatRange } from './query'
   import { tags } from './tags.svelte'
   import ViewHeader from './ViewHeader.svelte'
@@ -14,6 +15,9 @@
   const OVERSCAN = 12
 
   type Column = { key: SortKey | null; label: string; numeric?: boolean; optional?: boolean }
+
+  // Suggested for removal is about skips, so it shows them even when song lists otherwise don't.
+  const showSkips = $derived(prefs.showSkips || library.view.kind === 'suggested')
 
   const columns = $derived<Column[]>([
     ...(library.view.kind === 'manual' || library.view.kind === 'playing' ? [{ key: 'position', label: '#', numeric: true } as Column] : []),
@@ -26,7 +30,7 @@
     { key: null, label: 'Tags', optional: true },
     { key: 'bpm', label: 'BPM', numeric: true, optional: true },
     { key: 'plays', label: 'Plays', numeric: true, optional: true },
-    { key: 'skips', label: 'Skips', numeric: true, optional: true },
+    ...(showSkips ? [{ key: 'skips', label: 'Skips', numeric: true, optional: true } as Column] : []),
     { key: 'duration', label: 'Time', numeric: true },
   ])
 
@@ -94,7 +98,11 @@
   }
 </script>
 
-<section class="tracks" class:numbered={library.view.kind === 'manual' || library.view.kind === 'playing'}>
+<section
+  class="tracks"
+  class:numbered={library.view.kind === 'manual' || library.view.kind === 'playing'}
+  class:no-skips={!showSkips}
+>
   <ViewHeader />
 
   <div class="toolbar">
@@ -240,7 +248,9 @@
                 ondblclick={onBpmDblclick}
               >{formatBpm(row)}</span>
               <span class="cell numeric dim optional">{row.playCount || ''}</span>
-              <span class="cell numeric dim optional">{row.skipCount || ''}</span>
+              {#if showSkips}
+                <span class="cell numeric dim optional">{row.skipCount || ''}</span>
+              {/if}
               <span class="cell numeric dim">{row.durationMs ? formatTime(row.durationMs / 1000) : ''}</span>
             {/if}
           </div>
@@ -252,7 +262,9 @@
 
 <style>
   .tracks {
-    --columns: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px 60px 60px 64px;
+    /* Plays and Skips. */
+    --counts: 60px 60px;
+    --columns: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px var(--counts) 64px;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -260,7 +272,11 @@
   }
 
   .tracks.numbered {
-    --columns: 36px minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px 60px 60px 64px;
+    --columns: 36px minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px var(--counts) 64px;
+  }
+
+  .tracks.no-skips {
+    --counts: 60px;
   }
 
   .toolbar {

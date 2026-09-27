@@ -10,6 +10,8 @@ export interface Prefs {
   sidebarWidth: number
   /** Shortcut overrides by command id; commands not listed keep their defaults. */
   keys: Record<string, string[]>
+  /** Whether song lists show skip counts. Suggested for removal always does. */
+  showSkips: boolean
 }
 
 export const SIDEBAR_DEFAULT = 230
@@ -42,6 +44,7 @@ function clean(raw: unknown): Prefs {
         ? Math.min(Math.max(Math.round(value.sidebarWidth), SIDEBAR_MIN), SIDEBAR_MAX)
         : SIDEBAR_DEFAULT,
     keys,
+    showSkips: value.showSkips !== false,
   }
 }
 
@@ -50,6 +53,7 @@ class PrefsStore {
   accent = $state<string | null>(null)
   sidebarWidth = $state(SIDEBAR_DEFAULT)
   keys = $state<Record<string, string[]>>({})
+  showSkips = $state(true)
 
   /** What the host has, so an unchanged value is never written back. */
   private saved = ''
@@ -105,8 +109,13 @@ class PrefsStore {
     this.save()
   }
 
+  setShowSkips = (on: boolean) => {
+    this.showSkips = on
+    this.save()
+  }
+
   private snapshot(): Prefs {
-    return { v: 1, theme: this.theme, accent: this.accent, sidebarWidth: this.sidebarWidth, keys: this.keys }
+    return { v: 1, theme: this.theme, accent: this.accent, sidebarWidth: this.sidebarWidth, keys: this.keys, showSkips: this.showSkips }
   }
 
   private apply(prefs: Prefs) {
@@ -114,6 +123,7 @@ class PrefsStore {
     this.accent = prefs.accent
     this.sidebarWidth = prefs.sidebarWidth
     this.keys = prefs.keys
+    this.showSkips = prefs.showSkips
   }
 
   private save() {
