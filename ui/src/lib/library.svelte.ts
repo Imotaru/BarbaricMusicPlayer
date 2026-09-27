@@ -281,7 +281,7 @@ class Library {
       this.view = { kind: 'manual', id: playlist.id }
       this.text = ''
       this.filter = emptyFilter()
-      this.sort = 'position'
+      this.sort = this.openingSort
       this.desc = false
     } else {
       this.view = { kind: 'filter', id: playlist.id }
@@ -315,7 +315,7 @@ class Library {
       this.view = { kind: 'playing' }
       this.text = ''
       this.filter = emptyFilter()
-      this.sort = 'position'
+      this.sort = this.openingSort
       this.desc = false
     }
     clearTimeout(this.debounce)
@@ -769,6 +769,11 @@ class Library {
   rescan = () => call('library.rescan')
 
   // ---- Internals -------------------------------------------------------------------------------
+
+  /** Lists with their own order open in it, or by title while shuffle makes that order moot. */
+  private get openingSort(): SortKey {
+    return player.shuffle ? 'title' : 'position'
+  }
 
   private showFiltered(filter: TagFilter) {
     if (this.view.kind !== 'library') {
