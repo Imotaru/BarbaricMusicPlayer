@@ -1,6 +1,6 @@
 # Barbaric Music Player
 
-A lightweight Windows music player for local files. Planned features:
+A lightweight Windows music player for local files. Features:
 - a volume setting per song
 - BPM detection, plus filtering by BPM range
 - tag-based playlists
