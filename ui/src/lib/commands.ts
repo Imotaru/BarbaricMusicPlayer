@@ -110,7 +110,7 @@ export const COMMANDS: Command[] = [
     run: () => library.moveSelected(1),
   },
   { id: 'library.selectAll', label: 'Select all', group: 'Songs', when: hasSelection, run: library.selectAll },
-  { id: 'library.clearFilter', label: 'Clear tag filter', group: 'Songs', when: () => listShown() && library.hasFilter, run: library.clearFilter },
+  { id: 'library.clearFilter', label: 'Clear filter', group: 'Songs', when: () => listShown() && library.hasFilter, run: library.clearFilter },
   { id: 'library.resetLens', label: 'Reset BPM range', group: 'Songs', when: () => listShown() && library.lensActive, run: library.resetLens },
 
   { id: 'view.library', label: 'Library', group: 'Go to', when: listShown, run: library.openLibrary },

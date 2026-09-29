@@ -101,7 +101,8 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
   - Alt+click to exclude it.
 
   The chips above the list switch between include and exclude, and between matching all or any of the included tags.
-- **Filter playlists:** "Save as playlist" keeps the current search, tag filter, BPM range and sort as a playlist that updates itself. The BPM range becomes the playlist's own, shown as a chip, and still combines with whatever range the slider is set to later. Opening one loads it back into the controls. If you change it, the header offers Save changes or Revert.
+- **Filtering by artist:** click a song's artist to show only songs with exactly that artist. Tags can then narrow it further, and its chip's × removes it.
+- **Filter playlists:** "Save as playlist" keeps the current search, artist and tag filter, BPM range and sort as a playlist that updates itself. The BPM range becomes the playlist's own, shown as a chip, and still combines with whatever range the slider is set to later. Opening one loads it back into the controls. If you change it, the header offers Save changes or Revert.
 - **Manual playlists:** press P to add the selection to a playlist or start a new one. A song appears at most once in a playlist. Sort by # to keep the playlist's own order: Alt+↑/↓ moves the selection, and Del removes it.
 - **Renaming:** double-click a playlist or tag in the sidebar, or right-click it to rename, recolour or delete it.
 

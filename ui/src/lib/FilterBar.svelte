@@ -9,8 +9,18 @@
   const range = $derived(formatRange(library.filter.bpmMin, library.filter.bpmMax))
 </script>
 
-{#if included.length > 0 || excluded.length > 0 || library.filter.untagged || range}
+{#if library.filter.artist || included.length > 0 || excluded.length > 0 || library.filter.untagged || range}
   <div class="filter-bar" role="group" aria-label="Filter">
+    {#if library.filter.artist}
+      <span class="label">Artist</span>
+      <span class="chip plain">
+        <span class="toggle">{library.filter.artist}</span>
+        <button class="remove" aria-label="Stop filtering by artist" onclick={library.dropArtist}>
+          <svg viewBox="0 0 10 10"><path d="M2.5 2.5l5 5M7.5 2.5l-5 5" /></svg>
+        </button>
+      </span>
+    {/if}
+
     {#if included.length > 0 || excluded.length > 0 || library.filter.untagged}
       <span class="label">Tags</span>
     {/if}

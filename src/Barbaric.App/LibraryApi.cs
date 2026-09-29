@@ -211,6 +211,9 @@ public sealed class LibraryApi : IDisposable
 
         var filter = new TrackFilter
         {
+            Artist = f.TryGetProperty("artist", out var a) && a.ValueKind == JsonValueKind.String && a.GetString()!.Trim() is { Length: > 0 } artist
+                ? artist
+                : null,
             AllTags = f.GetIds("allTags"),
             AnyTags = f.GetIds("anyTags"),
             NoneTags = f.GetIds("noneTags"),

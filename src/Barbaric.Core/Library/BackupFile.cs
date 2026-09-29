@@ -171,6 +171,8 @@ public sealed record BackupView(string? Text = null, TrackSort Sort = TrackSort.
 /// <summary>A <see cref="TrackFilter"/> with tag names in place of ids.</summary>
 public sealed record BackupFilter
 {
+    public string? Artist { get; init; }
+
     public IReadOnlyList<string> AllTags { get; init; } = [];
 
     public IReadOnlyList<string> AnyTags { get; init; } = [];

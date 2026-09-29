@@ -469,6 +469,12 @@ public sealed class TrackRepository(LibraryDatabase database)
 
         if (query.Filter is { } filter)
         {
+            if (filter.Artist is { } artist)
+            {
+                where.Add("t.artist = @artist COLLATE NOCASE");
+                parameters.Add("artist", artist);
+            }
+
             var tagWhere = new List<string>();
             var all = filter.AllTags.Distinct().ToList();
             if (all.Count > 0)

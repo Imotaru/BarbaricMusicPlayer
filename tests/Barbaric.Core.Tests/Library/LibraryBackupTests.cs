@@ -32,7 +32,7 @@ public sealed class LibraryBackupTests : IDisposable
         await _source.Tags.AddToTracksAsync(gym.Id, [ids["Three"]]);
         await _source.Playlists.CreateManualAsync("Mix", [ids["Three"], ids["One"]]);
         await _source.Playlists.CreateFilterAsync(
-            "Chilled", new TrackQuery(Sort: TrackSort.Bpm, Filter: new TrackFilter { AllTags = [chill.Id], BpmMin = 100 }));
+            "Chilled", new TrackQuery(Sort: TrackSort.Bpm, Filter: new TrackFilter { Artist = "A", AllTags = [chill.Id], BpmMin = 100 }));
         await _source.Tracks.SetInfoAsync([ids["One"]], new Dictionary<TrackField, object?> { [TrackField.Artist] = "Edited" });
         await _source.Tracks.SetManualBpmAsync([ids["Two"]], 128);
         await _source.Tracks.SetGainAsync(ids["Three"], -3);
@@ -98,6 +98,7 @@ public sealed class LibraryBackupTests : IDisposable
         Assert.Equal(TrackSort.Bpm, filter.Sort);
         Assert.Equal([tags[0].Id], filter.Filter!.AllTags);
         Assert.Equal(100.0, filter.Filter.BpmMin);
+        Assert.Equal("A", filter.Filter.Artist);
     }
 
     [Fact]
