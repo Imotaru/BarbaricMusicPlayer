@@ -224,4 +224,14 @@ public sealed class PlaylistRepositoryTests : IAsyncLifetime
         Assert.Equal(130, saved.Filter.BpmMax);
         Assert.True(saved.Filter.IncludeUnknownBpm);
     }
+
+    [Fact]
+    public void SavedView_KeepsItsArtist()
+    {
+        var view = new TrackQuery(Filter: new TrackFilter { Artist = "Band One" });
+
+        var saved = PlaylistRepository.DeserializeQuery(PlaylistRepository.SerializeQuery(view));
+
+        Assert.Equal("Band One", saved?.Filter?.Artist);
+    }
 }

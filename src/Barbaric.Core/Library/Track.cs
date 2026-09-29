@@ -126,9 +126,12 @@ public enum TrackSort
     Position,
 }
 
-/// <summary>Narrows the list by tags and BPM. Empty lists and nulls mean "no constraint".</summary>
+/// <summary>Narrows the list by artist, tags and BPM. Empty lists and nulls mean "no constraint".</summary>
 public sealed record TrackFilter
 {
+    /// <summary>Tracks whose artist is exactly this, ignoring case.</summary>
+    public string? Artist { get; init; }
+
     /// <summary>Tracks must have every one of these tags.</summary>
     public IReadOnlyList<long> AllTags { get; init; } = [];
 
@@ -150,7 +153,7 @@ public sealed record TrackFilter
 
     [JsonIgnore]
     public bool IsEmpty =>
-        AllTags.Count == 0 && AnyTags.Count == 0 && NoneTags.Count == 0 && !Untagged && BpmMin is null && BpmMax is null;
+        Artist is null && AllTags.Count == 0 && AnyTags.Count == 0 && NoneTags.Count == 0 && !Untagged && BpmMin is null && BpmMax is null;
 }
 
 /// <summary>A BPM range; a null bound leaves that side open.</summary>

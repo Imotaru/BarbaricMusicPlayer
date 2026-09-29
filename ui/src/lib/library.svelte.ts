@@ -96,7 +96,7 @@ export type View =
   | { kind: 'playing' }
 
 /** What kind of list the player's songs came from, for picking an icon. */
-export type SourceKind = 'library' | 'tags' | 'search' | 'manual' | 'filter' | 'suggested' | 'hidden'
+export type SourceKind = 'library' | 'tags' | 'artist' | 'search' | 'manual' | 'filter' | 'suggested' | 'hidden'
 
 /** The list the player's songs were drawn from, as the player bar and the Now playing view show it. */
 export interface PlaySource {
@@ -307,6 +307,9 @@ class Library {
   /** Shows the whole library narrowed to one tag. */
   showTag = (id: number) => this.showFiltered({ ...emptyFilter(), include: [id] })
 
+  /** Shows the whole library narrowed to one artist, matched exactly (ignoring case). */
+  showArtist = (artist: string) => this.showFiltered({ ...emptyFilter(), artist })
+
   /** Shows the library songs that carry no tags yet, such as ones that just arrived. */
   showUntagged = () => this.showFiltered({ ...emptyFilter(), untagged: true })
 
@@ -365,7 +368,8 @@ class Library {
     if (saved) return made('filter', saved.name, saved)
     const name = describeView(filter, source.text ?? '', source.bpm, (ids) => tags.resolve(ids).map((t) => t.name))
     if (!name) return made('library', 'All songs')
-    return made(isEmptyFilter(filter) ? 'search' : 'tags', name)
+    if (isEmptyFilter(filter)) return made('search', name)
+    return made(isEmptyFilter({ ...filter, artist: null }) ? 'artist' : 'tags', name)
   }
 
   /** Throws away edits to the open filter playlist. */
@@ -453,6 +457,8 @@ class Library {
   }
 
   dropUntagged = () => this.setFilter({ ...this.filter, untagged: false })
+
+  dropArtist = () => this.setFilter({ ...this.filter, artist: null })
 
   /** Called before tagging songs: in the Untagged list they stay put instead of vanishing. */
   keepListed = (ids: number[]) => {
@@ -855,7 +861,7 @@ class Library {
     this.filter = fromTrackFilter(query?.filter)
   }
 
-  /** A name for a saved view, from its tags, BPM range and search text: "chill + party −live 120–130 BPM “beat”". */
+  /** A name for a saved view, from its artist, tags, BPM range and search text: "chill + party −live 120–130 BPM “beat”". */
   private suggestName() {
     const names = (ids: number[]) => tags.resolve(ids).map((t) => t.name)
     return describeView(this.filter, this.text, this.context.bpm, names) || 'New playlist'

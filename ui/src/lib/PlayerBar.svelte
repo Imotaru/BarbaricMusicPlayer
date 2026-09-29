@@ -40,6 +40,8 @@ Adjusts on top of the automatic level (${auto}) that evens it out with other son
         <svg viewBox="0 0 16 16" aria-hidden="true">
           {#if source.kind === 'tags'}
             <path d="M2 2.5h5.3l6.2 6.2-4.8 4.8L2.5 7.3z" /><circle cx="5.3" cy="5.3" r="1" />
+          {:else if source.kind === 'artist'}
+            <circle cx="8" cy="5.5" r="2.8" /><path d="M2.5 14.5c.6-3 2.8-4.7 5.5-4.7s4.9 1.7 5.5 4.7" />
           {:else if source.kind === 'filter'}
             <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z" />
           {:else if source.kind === 'manual'}

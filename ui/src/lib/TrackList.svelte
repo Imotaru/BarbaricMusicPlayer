@@ -169,6 +169,13 @@
     openBpmEditor(pointOf(e))
   }
 
+  // Clicking an artist shows only that artist; with Ctrl or Shift the click selects as usual.
+  function onArtistClick(e: MouseEvent, artist: string) {
+    if (e.ctrlKey || e.shiftKey || e.metaKey) return
+    e.stopPropagation()
+    library.showArtist(artist)
+  }
+
   function onRowContextmenu(e: MouseEvent, index: number) {
     e.preventDefault()
     if (library.row(index)) openRowMenu(pointOf(e), index)
@@ -326,7 +333,19 @@
                 {/if}
                 {row.title}
               </span>
-              <span class="cell dim">{row.artist ?? ''}</span>
+              <span class="cell dim">
+                {#if row.artist}
+                  {@const artist = row.artist}
+                  <!-- The list re-renders after the first click, so a double-click must not reach the row and play. -->
+                  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                  <span
+                    class="artist"
+                    title="Show only {artist}"
+                    onclick={(e) => onArtistClick(e, artist)}
+                    ondblclick={(e) => !e.ctrlKey && !e.shiftKey && e.stopPropagation()}
+                  >{artist}</span>
+                {/if}
+              </span>
               {#if library.view.kind === 'missing'}
                 <span class="cell dim optional path" title={row.path}><bdi>{row.path}</bdi></span>
               {:else}
@@ -559,6 +578,16 @@
 
   .dim {
     color: var(--text-dim);
+  }
+
+  .artist {
+    cursor: pointer;
+  }
+
+  .artist:hover {
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .bpm.unsure {

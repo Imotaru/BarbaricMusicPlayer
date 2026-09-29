@@ -425,6 +425,7 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
         var filter = query.Filter is { } f
             ? new BackupFilter
             {
+                Artist = f.Artist,
                 AllTags = Names(f.AllTags),
                 AnyTags = Names(f.AnyTags),
                 NoneTags = Names(f.NoneTags),
@@ -456,6 +457,7 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
         var filter = view.Filter is { } f
             ? new TrackFilter
             {
+                Artist = string.IsNullOrWhiteSpace(f.Artist) ? null : f.Artist.Trim(),
                 AllTags = await Ids(f.AllTags),
                 AnyTags = await Ids(f.AnyTags),
                 NoneTags = await Ids(f.NoneTags),

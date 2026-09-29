@@ -49,6 +49,38 @@ public sealed class FilterTests : IAsyncLifetime
         Assert.Equal(expected, titles);
     }
 
+    [Theory]
+    [InlineData("Band One", new[] { "Alpha", "Bravo" })]
+    [InlineData("band two", new[] { "Charlie", "Delta", "Echo" })]
+    [InlineData("Band", new string[0])]
+    public async Task ArtistFilter_MatchesTheWholeArtistIgnoringCase(string artist, string[] expected)
+    {
+        var filter = new TrackFilter { Artist = artist };
+
+        Assert.False(filter.IsEmpty);
+        Assert.Equal(expected, await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter)));
+    }
+
+    [Fact]
+    public async Task ArtistFilter_CombinesWithTagsAndSearch()
+    {
+        var filter = new TrackFilter { Artist = "Band Two", AllTags = Ids(["rock"]) };
+
+        Assert.Equal(["Charlie"], await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter)));
+        Assert.Equal(["Delta"], await _library.TitlesAsync(new TrackQuery("delta", Filter: filter with { AllTags = [] })));
+        Assert.Empty(await _library.TitlesAsync(new TrackQuery("alpha", Filter: filter with { AllTags = [] })));
+    }
+
+    [Fact]
+    public async Task ArtistFilter_HoldsForKeptSongs()
+    {
+        var filter = new TrackFilter { Artist = "Band Two", Untagged = true };
+
+        var titles = await _library.TitlesAsync(new TrackQuery(Sort: TrackSort.Title, Filter: filter, KeepIds: [_tracks["Alpha"], _tracks["Delta"]]));
+
+        Assert.Equal(["Delta", "Echo"], titles);
+    }
+
     [Fact]
     public async Task Filter_KeepsTheRequestedSortOrder()
     {
