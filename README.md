@@ -77,7 +77,7 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
 
 ## Tags and playlists
 
-- **Selecting:** Ctrl+click toggles a song, Shift+click selects a range, and Ctrl+A selects the whole list. Right-click for a menu.
+- **Selecting:** Ctrl+click toggles a song, Shift+click selects a range, and Ctrl+A selects the whole list. Right-click for a menu; "Reveal in File Explorer" there opens each song's folder with its file selected.
 - **Tags:** press T to tag the selection. Type to find a tag, or type a new name to create one. Each toggle applies to every selected song.
 - **Filtering by tag:** in the sidebar's Tags section:
   - Click a tag to show only that tag.

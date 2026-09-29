@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 using Barbaric.App.Bridge;
@@ -102,6 +103,7 @@ public sealed class LibraryApi : IDisposable
             EmitTracksChanged();
         });
         bridge.QueryAsync("library.recycle", async p => await RecycleAsync(p.GetIds()));
+        bridge.QueryAsync("library.reveal", async p => await RevealAsync(p.GetIds()));
         bridge.CommandAsync("library.forget", async p =>
         {
             await _tracks.ForgetAsync(p.GetIds());
@@ -303,6 +305,36 @@ public sealed class LibraryApi : IDisposable
         return new RecycleResult(recycled.Count, failed);
     }
 
+    /// <summary>
+    /// Shows songs' files in File Explorer: one window per folder, with that folder's songs selected.
+    /// Only the first few folders open, so revealing a whole library doesn't flood the screen.
+    /// </summary>
+    private async Task<RevealResult> RevealAsync(List<long> ids)
+    {
+        const int maxFolders = 10;
+        var found = new List<string>();
+        var missing = 0;
+        foreach (var id in ids)
+        {
+            if (await _tracks.GetAsync(id) is { } track && File.Exists(track.Path))
+            {
+                found.Add(track.Path);
+            }
+            else
+            {
+                missing++;
+            }
+        }
+
+        var folders = found.GroupBy(path => Path.GetDirectoryName(path) ?? path, StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var folder in folders.Take(maxFolders))
+        {
+            NativeMethods.RevealInExplorer(folder.Key, [.. folder]);
+        }
+
+        return new RevealResult(Math.Min(folders.Count, maxFolders), missing, folders.Count > maxFolders);
+    }
+
     /// <summary>Songs left or joined the library, which changes tag and playlist counts too.</summary>
     public void EmitTracksChanged()
     {
@@ -359,6 +391,8 @@ public sealed class LibraryApi : IDisposable
     public sealed record ScanStatus(bool Running, int Processed, int Total, ScanResult? LastResult);
 
     private sealed record RecycleResult(int Recycled, IReadOnlyList<string> Failed);
+
+    private sealed record RevealResult(int Folders, int Missing, bool Capped);
 
     /// <summary>
     /// Forwards scanner progress at most ~10 times a second, and lets the list refresh every

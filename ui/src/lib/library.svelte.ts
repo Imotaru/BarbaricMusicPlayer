@@ -116,6 +116,12 @@ export interface LibraryCounts {
   missing: number
 }
 
+interface RevealResult {
+  folders: number
+  missing: number
+  capped: boolean
+}
+
 interface RecycleResult {
   recycled: number
   failed: string[]
@@ -752,6 +758,21 @@ class Library {
     ui.run(async () => {
       await navigator.clipboard.writeText(paths.join('\r\n'))
       ui.notify(paths.length === 1 ? 'Copied the file path.' : `Copied ${paths.length.toLocaleString()} file paths.`)
+    })
+  }
+
+  /** Shows the selected songs' files in File Explorer. Explorer opening is the feedback, so only problems are told. */
+  revealSelected = () => {
+    const ids = this.selectedIds()
+    if (ids.length === 0) return
+    ui.run(async () => {
+      const result = await call<RevealResult>('library.reveal', { trackIds: ids })
+      if (result.missing > 0) {
+        const which = result.missing > 1 ? `the files of ${songs(result.missing)}` : ids.length > 1 ? "one song's file" : 'the file'
+        ui.notify(`Couldn't find ${which}.`, true)
+      } else if (result.capped) {
+        ui.notify(`Opened the first ${result.folders} folders.`)
+      }
     })
   }
 

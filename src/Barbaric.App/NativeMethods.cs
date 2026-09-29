@@ -81,6 +81,43 @@ internal static class NativeMethods
         return !File.Exists(path);
     }
 
+    /// <summary>
+    /// Opens a folder in File Explorer with the given files in it selected, or brings an Explorer
+    /// window already showing that folder forward.
+    /// </summary>
+    public static void RevealInExplorer(string folder, IReadOnlyList<string> files)
+    {
+        var folderPidl = ParseDisplayName(folder);
+        var filePidls = new List<nint>(files.Count);
+        try
+        {
+            if (folderPidl == 0)
+            {
+                return;
+            }
+
+            foreach (var file in files)
+            {
+                var pidl = ParseDisplayName(file);
+                if (pidl != 0)
+                {
+                    filePidls.Add(pidl);
+                }
+            }
+
+            // Explorer takes full item IDs here as well as ones relative to the folder.
+            SHOpenFolderAndSelectItems(folderPidl, (uint)filePidls.Count, [.. filePidls], 0);
+        }
+        finally
+        {
+            filePidls.ForEach(CoTaskMemFree);
+            CoTaskMemFree(folderPidl);
+        }
+    }
+
+    private static nint ParseDisplayName(string path) =>
+        SHParseDisplayName(path, 0, out var pidl, 0, out _) == 0 ? pidl : 0;
+
     public static WindowPlacement? GetPlacement(Window window)
     {
         var placement = new WindowPlacement { Length = Marshal.SizeOf<WindowPlacement>() };
@@ -181,6 +218,15 @@ internal static class NativeMethods
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHFileOperationW")]
     private static extern int SHFileOperation(ref ShFileOpStruct operation);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHParseDisplayName(string name, nint bindContext, out nint pidl, uint attributesIn, out uint attributesOut);
+
+    [DllImport("shell32.dll")]
+    private static extern int SHOpenFolderAndSelectItems(nint folderPidl, uint count, nint[] itemPidls, uint flags);
+
+    [DllImport("ole32.dll")]
+    private static extern void CoTaskMemFree(nint memory);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);

@@ -53,6 +53,7 @@ export function openRowMenu(at: Point, index: number) {
   }
   const items: MenuItem[] = [
     { label: 'Play', shortcut: 'Enter', action: () => library.playIndex(index) },
+    { label: 'Reveal in File Explorer', action: library.revealSelected },
     { separator: true },
     {
       label: count > 1 ? `Edit info of ${songs(count)}…` : 'Edit info…',
