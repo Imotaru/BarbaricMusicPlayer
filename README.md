@@ -130,8 +130,9 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
 ## Look and feel
 
 - **Settings** (the gear in the title bar, or Ctrl+,): pick a theme (Ember, Graphite, Midnight, Moss or the light Paper) and an accent colour, and change keyboard shortcuts.
-- **Remembered between sessions:** the theme, window size and position (including maximized), master volume, sidebar width, and the queue. The last song comes back paused where you left it, with the list it was playing from and shuffle.
+- **Remembered between sessions:** the theme, window size and position (including maximized), master volume, sidebar width, song list column widths, and the queue. The last song comes back paused where you left it, with the list it was playing from and shuffle.
 - **Sidebar:** drag its edge to resize it. Double-click the edge to reset it.
+- **Song list columns:** drag the line between two column headers to resize them. Width moves between those two, so the list always fits the window. Double-click a line (or use Settings → Appearance) to reset every column.
 - **Mini player** (Ctrl+M, or the button in the title bar): shrinks the window to a small always-on-top player. It remembers where you put it.
 - **Command palette** (Ctrl+K): run any command, or jump to a playlist or tag, by typing part of its name.
 - **Shortcuts:** every command's keys can be changed under Settings → Keyboard. Playback commands, the mini player and "bring to front" can also get a **global** hotkey that works while another app is in front. Global hotkeys start empty and must use Ctrl+Alt, Ctrl+Shift or Win, or F13–F24.

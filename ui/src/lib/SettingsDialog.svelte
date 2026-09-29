@@ -203,6 +203,10 @@
             Turn this off to hide the Skips column. Suggested for removal still shows it, since that's what the list is
             about.
           </p>
+          <p class="intro">Drag the lines between column headers to resize the columns; they keep that width.</p>
+          <button class="action" disabled={Object.keys(prefs.columnWidths).length === 0} onclick={prefs.resetColumnWidths}>
+            Reset column widths
+          </button>
         </section>
 
         <section>

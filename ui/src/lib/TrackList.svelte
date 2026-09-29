@@ -14,25 +14,102 @@
   const ROW_HEIGHT = 34
   const OVERSCAN = 12
 
-  type Column = { key: SortKey | null; label: string; numeric?: boolean; optional?: boolean }
+  /** Text columns share the free space by weight; the others have a fixed width in pixels. */
+  type Column = { id: string; key: SortKey | null; label: string; flex?: boolean; numeric?: boolean; optional?: boolean }
+
+  const DEFAULT_WIDTHS: Record<string, number> = {
+    position: 36,
+    title: 220,
+    artist: 140,
+    album: 140,
+    path: 140,
+    tags: 130,
+    bpm: 56,
+    plays: 60,
+    skips: 60,
+    duration: 64,
+  }
+  const MIN_FLEX_WIDTH = 40
+  const MIN_FIXED_WIDTH = 28
+  const minWidth = (c: Column) => Math.min(c.flex ? MIN_FLEX_WIDTH : MIN_FIXED_WIDTH, DEFAULT_WIDTHS[c.id])
 
   // Suggested for removal is about skips, so it shows them even when song lists otherwise don't.
   const showSkips = $derived(prefs.showSkips || library.view.kind === 'suggested')
 
   const columns = $derived<Column[]>([
-    ...(library.view.kind === 'manual' || library.view.kind === 'playing' ? [{ key: 'position', label: '#', numeric: true } as Column] : []),
-    { key: 'title', label: 'Title' },
-    { key: 'artist', label: 'Artist' },
+    ...(library.view.kind === 'manual' || library.view.kind === 'playing'
+      ? [{ id: 'position', key: 'position', label: '#', numeric: true } as Column]
+      : []),
+    { id: 'title', key: 'title', label: 'Title', flex: true },
+    { id: 'artist', key: 'artist', label: 'Artist', flex: true },
     // Missing songs show where their file was last seen, to help find it again.
     library.view.kind === 'missing'
-      ? { key: null, label: 'Last seen at', optional: true }
-      : { key: 'album', label: 'Album', optional: true },
-    { key: null, label: 'Tags', optional: true },
-    { key: 'bpm', label: 'BPM', numeric: true, optional: true },
-    { key: 'plays', label: 'Plays', numeric: true, optional: true },
-    ...(showSkips ? [{ key: 'skips', label: 'Skips', numeric: true, optional: true } as Column] : []),
-    { key: 'duration', label: 'Time', numeric: true },
+      ? { id: 'path', key: null, label: 'Last seen at', flex: true, optional: true }
+      : { id: 'album', key: 'album', label: 'Album', flex: true, optional: true },
+    { id: 'tags', key: null, label: 'Tags', flex: true, optional: true },
+    { id: 'bpm', key: 'bpm', label: 'BPM', numeric: true, optional: true },
+    { id: 'plays', key: 'plays', label: 'Plays', numeric: true, optional: true },
+    ...(showSkips ? [{ id: 'skips', key: 'skips', label: 'Skips', numeric: true, optional: true } as Column] : []),
+    { id: 'duration', key: 'duration', label: 'Time', numeric: true },
   ])
+
+  // Last seen at takes Album's place, so it starts at Album's width.
+  const widthOf = (id: string) =>
+    prefs.columnWidths[id] ?? (id === 'path' ? prefs.columnWidths.album : undefined) ?? DEFAULT_WIDTHS[id]
+
+  const template = $derived(
+    columns.map((c) => (c.flex ? `minmax(0, ${widthOf(c.id)}fr)` : `${widthOf(c.id)}px`)).join(' '),
+  )
+
+  let header = $state<HTMLDivElement>()
+  let drag = $state<{ pointer: number; x: number; widths: Record<string, number>; left: Column; right: Column } | null>(null)
+
+  /**
+   * Every shown column's current width in pixels. Text columns' weights then equal their pixels, so trading
+   * width between two neighbours moves their shared edge by exactly that much.
+   */
+  function measure(): Record<string, number> {
+    const widths = { ...prefs.columnWidths }
+    const cells = header ? [...header.querySelectorAll<HTMLElement>(':scope > .head')] : []
+    columns.forEach((c, i) => {
+      if (cells[i]) widths[c.id] = cells[i].getBoundingClientRect().width
+    })
+    return widths
+  }
+
+  /** Moves the edge between `left` and `right` by `delta` pixels, taking the width from the other one. */
+  function trade(widths: Record<string, number>, left: Column, right: Column, delta: number, persist: boolean) {
+    const a = widths[left.id]
+    const b = widths[right.id]
+    // A small window can leave a column under its minimum already; that alone never moves the edge.
+    const d = Math.min(Math.max(delta, Math.min(0, minWidth(left) - a)), Math.max(0, b - minWidth(right)))
+    prefs.setColumnWidths({ ...widths, [left.id]: a + d, [right.id]: b - d }, persist)
+  }
+
+  function startColumnResize(e: PointerEvent, index: number) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    drag = { pointer: e.pointerId, x: e.clientX, widths: measure(), left: columns[index], right: columns[index + 1] }
+  }
+
+  function resizeColumn(e: PointerEvent) {
+    if (drag?.pointer === e.pointerId) trade(drag.widths, drag.left, drag.right, e.clientX - drag.x, false)
+  }
+
+  function endColumnResize(e: PointerEvent) {
+    if (drag?.pointer !== e.pointerId) return
+    drag = null
+    prefs.setColumnWidths(prefs.columnWidths)
+  }
+
+  function onGripKeydown(e: KeyboardEvent, index: number) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    e.stopPropagation()
+    const step = (e.shiftKey ? 40 : 10) * (e.key === 'ArrowRight' ? 1 : -1)
+    trade(measure(), columns[index], columns[index + 1], step, true)
+  }
 
   const placeholders = {
     library: 'Search songs, artists, albums…',
@@ -101,7 +178,8 @@
 <section
   class="tracks"
   class:numbered={library.view.kind === 'manual' || library.view.kind === 'playing'}
-  class:no-skips={!showSkips}
+  class:resizing={drag !== null}
+  style:--user-columns={template}
 >
   <ViewHeader />
 
@@ -125,25 +203,45 @@
 
   <FilterBar />
 
-  <div class="row header" role="row">
-    {#each columns as column (column.label)}
-      {#if column.key}
-        {@const key = column.key}
-        <button
-          class="cell"
-          class:numeric={column.numeric}
-          class:optional={column.optional}
-          class:active={library.sort === key}
-          onclick={() => library.setSort(key)}
-        >
-          {column.label}
-          {#if library.sort === key}
-            <span class="arrow">{library.desc ? '▾' : '▴'}</span>
-          {/if}
-        </button>
-      {:else}
-        <span class="cell" class:optional={column.optional}>{column.label}</span>
-      {/if}
+  <div class="row header" role="row" bind:this={header}>
+    {#each columns as column, index (column.id)}
+      <div class="head" class:optional={column.optional}>
+        {#if column.key}
+          {@const key = column.key}
+          <button
+            class="cell"
+            class:numeric={column.numeric}
+            class:active={library.sort === key}
+            onclick={() => library.setSort(key)}
+          >
+            {column.label}
+            {#if library.sort === key}
+              <span class="arrow">{library.desc ? '▾' : '▴'}</span>
+            {/if}
+          </button>
+        {:else}
+          <span class="cell">{column.label}</span>
+        {/if}
+        {#if index < columns.length - 1}
+          <!-- Beside the button rather than in it, so a drag never sorts. -->
+          <div
+            class="grip"
+            class:dragging={drag?.left.id === column.id}
+            role="slider"
+            aria-orientation="horizontal"
+            aria-label="{column.label} column width"
+            aria-valuenow={Math.round(widthOf(column.id))}
+            tabindex="0"
+            title="Drag to resize · double-click to reset"
+            onpointerdown={(e) => startColumnResize(e, index)}
+            onpointermove={resizeColumn}
+            onpointerup={endColumnResize}
+            onpointercancel={endColumnResize}
+            ondblclick={prefs.resetColumnWidths}
+            onkeydown={(e) => onGripKeydown(e, index)}
+          ></div>
+        {/if}
+      </div>
     {/each}
   </div>
 
@@ -262,21 +360,17 @@
 
 <style>
   .tracks {
-    /* Plays and Skips. */
-    --counts: 60px 60px;
-    --columns: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px var(--counts) 64px;
+    /* Built from the columns and their saved widths; narrow windows override it below. */
+    --columns: var(--user-columns);
     display: flex;
     flex-direction: column;
     min-height: 0;
     min-width: 0;
   }
 
-  .tracks.numbered {
-    --columns: 36px minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1.3fr) 56px var(--counts) 64px;
-  }
-
-  .tracks.no-skips {
-    --counts: 60px;
+  .tracks.resizing {
+    cursor: col-resize;
+    user-select: none;
   }
 
   .toolbar {
@@ -351,13 +445,41 @@
     font-size: 13px;
   }
 
+  /* Both keep room for the list's scrollbar, so the header's columns line up with the rows'. */
   .header {
     flex: none;
     height: 30px;
     border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
+
+  .head {
+    position: relative;
+    min-width: 0;
+  }
+
+  /* Sits over the gap after its column, wider than the line it shows so it's easy to grab. */
+  .grip {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    right: -13px;
+    z-index: 1;
+    width: 10px;
+    cursor: col-resize;
+    outline: 0;
+  }
+
+  .grip:hover,
+  .grip:focus-visible,
+  .grip.dragging {
+    background: linear-gradient(to right, transparent 4px, var(--accent) 4px, var(--accent) 6px, transparent 6px);
   }
 
   .header .cell {
+    display: block;
+    width: 100%;
     padding: 0;
     border: 0;
     background: none;
@@ -382,6 +504,7 @@
     flex: 1;
     position: relative;
     overflow-y: auto;
+    scrollbar-gutter: stable;
     min-height: 0;
     outline: 0;
   }
@@ -527,7 +650,8 @@
       --columns: 28px minmax(0, 2fr) minmax(0, 1.4fr) 56px;
     }
 
-    .optional {
+    .optional,
+    .grip {
       display: none;
     }
   }

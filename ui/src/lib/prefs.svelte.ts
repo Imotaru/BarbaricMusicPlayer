@@ -12,6 +12,11 @@ export interface Prefs {
   keys: Record<string, string[]>
   /** Whether song lists show skip counts. Suggested for removal always does. */
   showSkips: boolean
+  /**
+   * Song list column widths by column id: pixels for number columns, relative weights for text columns.
+   * Columns not listed keep their defaults.
+   */
+  columnWidths: Record<string, number>
 }
 
 export const SIDEBAR_DEFAULT = 230
@@ -35,6 +40,12 @@ function clean(raw: unknown): Prefs {
       if (Array.isArray(chords)) keys[id] = chords.filter((c): c is string => typeof c === 'string')
     }
   }
+  const columnWidths: Record<string, number> = {}
+  if (typeof value.columnWidths === 'object' && value.columnWidths !== null) {
+    for (const [id, width] of Object.entries(value.columnWidths)) {
+      if (typeof width === 'number' && Number.isFinite(width) && width > 0) columnWidths[id] = width
+    }
+  }
   return {
     v: 1,
     theme: themeById(typeof value.theme === 'string' ? value.theme : DEFAULT_THEME.id).id,
@@ -45,6 +56,7 @@ function clean(raw: unknown): Prefs {
         : SIDEBAR_DEFAULT,
     keys,
     showSkips: value.showSkips !== false,
+    columnWidths,
   }
 }
 
@@ -54,6 +66,7 @@ class PrefsStore {
   sidebarWidth = $state(SIDEBAR_DEFAULT)
   keys = $state<Record<string, string[]>>({})
   showSkips = $state(true)
+  columnWidths = $state<Record<string, number>>({})
 
   /** What the host has, so an unchanged value is never written back. */
   private saved = ''
@@ -114,8 +127,27 @@ class PrefsStore {
     this.save()
   }
 
+  /** While dragging, pass `persist: false`; save once the drag ends. */
+  setColumnWidths = (widths: Record<string, number>, persist = true) => {
+    this.columnWidths = Object.fromEntries(Object.entries(widths).map(([id, width]) => [id, Math.round(width * 10) / 10]))
+    if (persist) this.save()
+  }
+
+  resetColumnWidths = () => {
+    this.columnWidths = {}
+    this.save()
+  }
+
   private snapshot(): Prefs {
-    return { v: 1, theme: this.theme, accent: this.accent, sidebarWidth: this.sidebarWidth, keys: this.keys, showSkips: this.showSkips }
+    return {
+      v: 1,
+      theme: this.theme,
+      accent: this.accent,
+      sidebarWidth: this.sidebarWidth,
+      keys: this.keys,
+      showSkips: this.showSkips,
+      columnWidths: this.columnWidths,
+    }
   }
 
   private apply(prefs: Prefs) {
@@ -124,6 +156,7 @@ class PrefsStore {
     this.sidebarWidth = prefs.sidebarWidth
     this.keys = prefs.keys
     this.showSkips = prefs.showSkips
+    this.columnWidths = prefs.columnWidths
   }
 
   private save() {
