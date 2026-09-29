@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -83,10 +84,17 @@ internal static class NativeMethods
 
     /// <summary>
     /// Opens a folder in File Explorer with the given files in it selected, or brings an Explorer
-    /// window already showing that folder forward.
+    /// window already showing that folder forward. With no files, just opens the folder.
     /// </summary>
     public static void RevealInExplorer(string folder, IReadOnlyList<string> files)
     {
+        if (files.Count == 0)
+        {
+            // Given no items, SHOpenFolderAndSelectItems would open the parent with this folder selected.
+            Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true })?.Dispose();
+            return;
+        }
+
         var folderPidl = ParseDisplayName(folder);
         var filePidls = new List<nint>(files.Count);
         try

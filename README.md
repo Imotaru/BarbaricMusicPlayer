@@ -140,7 +140,7 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
   - For songs, tags (matched by name) and playlists (matched by name) that are in both, the backup's version wins. Anything else stays as it is.
   - A BPM that came from a file's tag is read from the file again rather than taken from the backup.
 - **Missing files:** a song whose file isn't in the library keeps its data and is listed when the import finishes, by file name and the path it had, so you can go and find it. Copy list puts that list on the clipboard.
-  - Such songs also appear under **Missing songs** in the sidebar, which shows where each file was last seen.
+  - Such songs also appear under **Missing songs** in the sidebar, which shows where each file was last seen. Reveal in File Explorer (right-click) opens that folder, or the nearest one above it that still exists.
   - Adding the folder that holds the file (or a rescan) brings the song back with its tags, playlists and stats, even if the file was moved or renamed.
   - Forget (Del) drops a missing song and its data for good.
 

@@ -310,32 +310,60 @@ public sealed class LibraryApi : IDisposable
 
     /// <summary>
     /// Shows songs' files in File Explorer: one window per folder, with that folder's songs selected.
-    /// Only the first few folders open, so revealing a whole library doesn't flood the screen.
+    /// A song whose file is gone opens the folder it was last in instead, or the nearest one above
+    /// it that still exists. Only the first few folders open, so revealing a whole library doesn't
+    /// flood the screen.
     /// </summary>
     private async Task<RevealResult> RevealAsync(List<long> ids)
     {
         const int maxFolders = 10;
-        var found = new List<string>();
+
+        // Each folder to open, with the files to select in it (none for a missing song's folder).
+        var found = new List<(string Folder, string? File)>();
         var missing = 0;
+        var unreachable = 0;
         foreach (var id in ids)
         {
-            if (await _tracks.GetAsync(id) is { } track && File.Exists(track.Path))
+            if (await _tracks.GetAsync(id) is not { } track)
             {
-                found.Add(track.Path);
+                unreachable++;
+            }
+            else if (File.Exists(track.Path))
+            {
+                found.Add((Path.GetDirectoryName(track.Path) ?? track.Path, track.Path));
+            }
+            else if (NearestExistingFolder(track.Path) is { } folder)
+            {
+                found.Add((folder, null));
+                missing++;
             }
             else
             {
-                missing++;
+                unreachable++;
             }
         }
 
-        var folders = found.GroupBy(path => Path.GetDirectoryName(path) ?? path, StringComparer.OrdinalIgnoreCase).ToList();
+        var folders = found.GroupBy(item => item.Folder, StringComparer.OrdinalIgnoreCase).ToList();
         foreach (var folder in folders.Take(maxFolders))
         {
-            NativeMethods.RevealInExplorer(folder.Key, [.. folder]);
+            NativeMethods.RevealInExplorer(folder.Key, [.. folder.Select(item => item.File).OfType<string>()]);
         }
 
-        return new RevealResult(Math.Min(folders.Count, maxFolders), missing, folders.Count > maxFolders);
+        return new RevealResult(Math.Min(folders.Count, maxFolders), missing, unreachable, folders.Count > maxFolders);
+    }
+
+    /// <summary>The folder a file was in, or the closest one above it that still exists.</summary>
+    private static string? NearestExistingFolder(string path)
+    {
+        for (var folder = Path.GetDirectoryName(path); !string.IsNullOrEmpty(folder); folder = Path.GetDirectoryName(folder))
+        {
+            if (Directory.Exists(folder))
+            {
+                return folder;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Songs left or joined the library, which changes tag and playlist counts too.</summary>
@@ -395,7 +423,9 @@ public sealed class LibraryApi : IDisposable
 
     private sealed record RecycleResult(int Recycled, IReadOnlyList<string> Failed);
 
-    private sealed record RevealResult(int Folders, int Missing, bool Capped);
+    /// <param name="Missing">Songs whose file is gone, so their folder opened instead.</param>
+    /// <param name="Unreachable">Songs with no file and no folder left to open.</param>
+    private sealed record RevealResult(int Folders, int Missing, int Unreachable, bool Capped);
 
     /// <summary>
     /// Forwards scanner progress at most ~10 times a second, and lets the list refresh every

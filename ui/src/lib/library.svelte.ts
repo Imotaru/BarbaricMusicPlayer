@@ -118,7 +118,10 @@ export interface LibraryCounts {
 
 interface RevealResult {
   folders: number
+  /** Songs whose file is gone, so the folder it was in opened instead. */
   missing: number
+  /** Songs with no file and no folder left to open. */
+  unreachable: number
   capped: boolean
 }
 
@@ -767,15 +770,23 @@ class Library {
     })
   }
 
-  /** Shows the selected songs' files in File Explorer. Explorer opening is the feedback, so only problems are told. */
+  /**
+   * Shows the selected songs' files in File Explorer, or for a file that's gone, the folder it was last in.
+   * Explorer opening is the feedback, so only problems are told.
+   */
   revealSelected = () => {
     const ids = this.selectedIds()
     if (ids.length === 0) return
     ui.run(async () => {
       const result = await call<RevealResult>('library.reveal', { trackIds: ids })
-      if (result.missing > 0) {
-        const which = result.missing > 1 ? `the files of ${songs(result.missing)}` : ids.length > 1 ? "one song's file" : 'the file'
+      if (result.unreachable > 0) {
+        const which =
+          result.unreachable > 1 ? `the folders of ${songs(result.unreachable)}` : ids.length > 1 ? "one song's folder" : 'the folder'
         ui.notify(`Couldn't find ${which}.`, true)
+      } else if (result.missing > 0 && this.view.kind !== 'missing') {
+        // In Missing songs a gone file is expected; elsewhere, say why nothing is selected.
+        const which = result.missing > 1 ? `the files of ${songs(result.missing)}` : ids.length > 1 ? "one song's file" : 'the file'
+        ui.notify(`Couldn't find ${which}, so opened where ${result.missing > 1 ? 'they were' : 'it was'}.`, true)
       } else if (result.capped) {
         ui.notify(`Opened the first ${result.folders} folders.`)
       }

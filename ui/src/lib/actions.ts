@@ -44,6 +44,7 @@ export function openRowMenu(at: Point, index: number) {
     // Nothing to play or analyze without the file, but its data can still be looked after.
     ui.openMenu(at, [
       { label: count > 1 ? 'Copy file paths' : 'Copy file path', action: library.copySelectedPaths },
+      { label: 'Reveal in File Explorer', action: library.revealSelected },
       { separator: true },
       {
         label: count > 1 ? `Edit info of ${songs(count)}…` : 'Edit info…',
