@@ -3,7 +3,7 @@
   import { commandById, COMMANDS, type Command } from './commands'
   import { chordLabel, chordOf, RESERVED } from './keys'
   import { keymap } from './keymap.svelte'
-  import { player } from './player.svelte'
+  import { player, SILENCE_MAX_DB, SILENCE_MIN_DB, SILENCE_STEP_DB } from './player.svelte'
   import { prefs } from './prefs.svelte'
   import { THEMES, themeById } from './themes'
   import { ui, type SettingsTab } from './ui.svelte'
@@ -259,6 +259,36 @@
           <p class="intro">
             A song comes up in proportion to how short it is: a 1-minute song ten times as often as a 10-minute one, so
             one long song doesn't take over a playlist. Long songs sit out some rounds of the shuffle instead.
+          </p>
+        </section>
+        <section>
+          <h3>Silence</h3>
+          <label class="check">
+            <input type="checkbox" checked={player.skipSilence} onchange={(e) => player.setSkipSilence(e.currentTarget.checked)} />
+            Skip silence at the start and end of songs
+          </label>
+          <p class="intro">
+            Songs start where their sound starts and move on where it ends, found when their volume is measured. Right-click
+            a song and pick Edit start and end… to set its times yourself; those apply even with this off.
+          </p>
+          <label class="threshold">
+            <span>Counts as silence below</span>
+            <input
+              type="range"
+              min={SILENCE_MIN_DB}
+              max={SILENCE_MAX_DB}
+              step={SILENCE_STEP_DB}
+              value={player.silenceThresholdDb}
+              disabled={!player.skipSilence}
+              style:--progress="{((player.silenceThresholdDb - SILENCE_MIN_DB) / (SILENCE_MAX_DB - SILENCE_MIN_DB)) * 100}%"
+              onchange={(e) => player.setSilenceThreshold(e.currentTarget.valueAsNumber)}
+              oninput={(e) => (player.silenceThresholdDb = e.currentTarget.valueAsNumber)}
+            />
+            <output>{player.silenceThresholdDb} dB</output>
+          </label>
+          <p class="intro">
+            Lower keeps faint noise such as hiss or a room's hum; higher also skips it, but can cut into very quiet
+            fade-ins and fade-outs.
           </p>
         </section>
       {:else if ui.settings === 'backup'}
@@ -587,6 +617,21 @@
   .limit input:focus {
     outline: 0;
     border-color: var(--accent);
+  }
+
+  .threshold {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 52px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .threshold output {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+    text-align: right;
   }
 
   .check input {

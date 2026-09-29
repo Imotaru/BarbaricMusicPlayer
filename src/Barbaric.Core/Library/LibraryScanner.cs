@@ -54,7 +54,8 @@ public sealed class LibraryScanner(LibraryDatabase database, TimeProvider? clock
             bpm_confidence = CASE WHEN {TagWins} THEN NULL ELSE bpm_confidence END,
             bpm_source = CASE WHEN {TagWins} THEN CASE WHEN @Bpm IS NULL THEN NULL ELSE 'tag' END ELSE bpm_source END,
             bpm = CASE WHEN {TagWins} THEN @Bpm ELSE bpm END,
-            loudness_analyzed = CASE WHEN fingerprint = @Fingerprint AND file_size = @FileSize THEN loudness_analyzed ELSE 0 END
+            loudness_analyzed = CASE WHEN fingerprint = @Fingerprint AND file_size = @FileSize THEN loudness_analyzed ELSE 0 END,
+            silence_edges = CASE WHEN fingerprint = @Fingerprint AND file_size = @FileSize THEN silence_edges ELSE NULL END
         WHERE id = @Id
         """;
 

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Barbaric.Core.Analysis;
 using Barbaric.Core.Audio;
 
 namespace Barbaric.Core.Library;
@@ -53,6 +54,38 @@ public sealed class Track
     /// <summary>The gain that makes this song as loud as the others.</summary>
     public double AutoGainDb => Gain.AutoGainDb(LoudnessLufs, PeakDb);
 
+    /// <summary>Where the sound starts and ends at each silence threshold, as stored; see <see cref="Silence"/>.</summary>
+    public string? SilenceEdges
+    {
+        get => _silenceEdges;
+        set
+        {
+            _silenceEdges = value;
+            _edges = null;
+        }
+    }
+
+    /// <summary>Where the user wants the song to start playing; null follows the silence.</summary>
+    public long? TrimStartMs { get; set; }
+
+    /// <summary>Where the user wants the song to stop playing; null follows the silence.</summary>
+    public long? TrimEndMs { get; set; }
+
+    /// <summary>The parsed <see cref="SilenceEdges"/>; null when not measured.</summary>
+    public IReadOnlyList<SilenceEdge>? Edges => _edges ??= Silence.FromJson(_silenceEdges);
+
+    /// <summary>
+    /// The part of the song that plays: the user's own start and end where set, otherwise the edges of
+    /// its sound when skipping silence, otherwise the whole song.
+    /// </summary>
+    public PlayRange PlayRange(bool skipSilence, int silenceDb)
+    {
+        var edge = skipSilence ? Silence.At(Edges, silenceDb) : null;
+        var start = TrimStartMs ?? edge?.StartMs ?? 0;
+        long? end = TrimEndMs ?? edge?.EndMs;
+        return end is { } e && e <= start ? new PlayRange(start, null) : new PlayRange(start, end);
+    }
+
     public long PlayCount { get; set; }
 
     public long SkipCount { get; set; }
@@ -67,6 +100,15 @@ public sealed class Track
     public bool Hidden { get; set; }
 
     public long AddedUtc { get; set; }
+
+    private string? _silenceEdges;
+    private IReadOnlyList<SilenceEdge>? _edges;
+}
+
+/// <summary>The part of a song that plays, in ms; a null end plays to the end of the file.</summary>
+public readonly record struct PlayRange(long StartMs, long? EndMs)
+{
+    public static readonly PlayRange Whole = new(0, null);
 }
 
 /// <summary>The slim shape of a track shown in the library list.</summary>

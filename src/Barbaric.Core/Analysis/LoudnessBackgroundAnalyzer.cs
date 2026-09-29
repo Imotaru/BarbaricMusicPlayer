@@ -3,8 +3,8 @@ using Barbaric.Core.Library;
 
 namespace Barbaric.Core.Analysis;
 
-/// <summary>A track's measured volume, as reported after it changes.</summary>
-public sealed record LoudnessInfo(long Id, double? LoudnessLufs, double? PeakDb, double AutoGainDb);
+/// <summary>A track's measured volume and silence edges (as stored; see <see cref="Silence"/>), as reported after they change.</summary>
+public sealed record LoudnessInfo(long Id, double? LoudnessLufs, double? PeakDb, double AutoGainDb, string? SilenceEdges = null);
 
 /// <summary>
 /// Measures the volume of tracks that haven't been measured yet in the background, most played first,
@@ -27,6 +27,6 @@ public sealed class LoudnessBackgroundAnalyzer(TrackRepository tracks, Func<stri
 
     protected override LoudnessInfo? Save(long id, LoudnessResult? result) =>
         tracks.SaveLoudnessAsync(id, result).GetAwaiter().GetResult()
-            ? new LoudnessInfo(id, result?.LoudPartLufs, result?.PeakDb, Gain.AutoGainDb(result?.LoudPartLufs, result?.PeakDb))
+            ? new LoudnessInfo(id, result?.LoudPartLufs, result?.PeakDb, Gain.AutoGainDb(result?.LoudPartLufs, result?.PeakDb), Silence.ToJson(result?.Edges))
             : null;
 }

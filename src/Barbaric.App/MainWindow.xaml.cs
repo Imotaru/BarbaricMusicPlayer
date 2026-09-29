@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private LibraryApi? _library;
     private BpmApi? _bpm;
     private LoudnessApi? _loudness;
+    private TrimApi? _trim;
     private MediaControls? _media;
 
     public MainWindow()
@@ -88,6 +89,7 @@ public partial class MainWindow : Window
             _media?.Dispose();
             _bpm?.Dispose();
             _loudness?.Dispose();
+            _trim?.Dispose();
             _library?.Dispose();
             _player?.Dispose();
 
@@ -175,6 +177,7 @@ public partial class MainWindow : Window
         _ = new PlaylistApi(new PlaylistRepository(_database), _bridge);
         _bpm = new BpmApi(new BpmBackgroundAnalyzer(tracks), tracks, _bridge);
         _loudness = new LoudnessApi(new LoudnessBackgroundAnalyzer(tracks), tracks, _controller, _player, _bridge, Dispatcher);
+        _trim = new TrimApi(tracks, _controller, _engine, _player, _bridge, Dispatcher);
         _ = new BackupApi(new LibraryBackup(_database), _library, _settings, ApplyBackupSettings, _bridge, this);
         _media = MediaControls.TryCreate(new WindowInteropHelper(this).Handle, _player);
         TaskbarButtons.Attach(this, _player);
@@ -247,6 +250,16 @@ public partial class MainWindow : Window
         if (settings.TryGetValue(PlayerApi.WeighBySkipsKey, out var skips) && skips.ValueKind is JsonValueKind.True or JsonValueKind.False)
         {
             _ = _player?.SetWeighBySkipsAsync(skips.GetBoolean());
+        }
+
+        if (settings.TryGetValue(PlayerApi.SkipSilenceKey, out var silence) && silence.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            _player?.SetSkipSilence(silence.GetBoolean());
+        }
+
+        if (settings.TryGetValue(PlayerApi.SilenceThresholdKey, out var threshold) && threshold.ValueKind == JsonValueKind.Number)
+        {
+            _player?.SetSilenceThreshold(threshold.GetInt32());
         }
 
         if (settings.TryGetValue(GlobalHotkeys.SettingsKey, out var hotkeys) && hotkeys.ValueKind == JsonValueKind.Object)

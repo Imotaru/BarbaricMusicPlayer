@@ -7,6 +7,7 @@
   import ContextMenu from './lib/ContextMenu.svelte'
   import ImportReport from './lib/ImportReport.svelte'
   import InfoEditor from './lib/InfoEditor.svelte'
+  import TrimEditor from './lib/TrimEditor.svelte'
   import { chordOf, hasModifier } from './lib/keys'
   import { keymap } from './lib/keymap.svelte'
   import { library } from './lib/library.svelte'
@@ -196,6 +197,11 @@
 {/if}
 {#if ui.importReport}
   <ImportReport report={ui.importReport} />
+{/if}
+{#if ui.trimEditor}
+  {#key ui.trimEditor}
+    <TrimEditor trackId={ui.trimEditor.trackId} />
+  {/key}
 {/if}
 {#if ui.palette}
   <CommandPalette />

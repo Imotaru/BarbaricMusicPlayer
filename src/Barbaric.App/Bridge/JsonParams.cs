@@ -15,6 +15,12 @@ public static class JsonParams
             ? value.GetString()
             : null;
 
+    /// <summary>Reads a whole number; a missing or null property reads as null.</summary>
+    public static long? GetOptionalNumber(this JsonElement p, string name) =>
+        p.ValueKind == JsonValueKind.Object && p.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+            ? (long)Math.Round(value.GetDouble())
+            : null;
+
     /// <summary>Reads an array of ids; a missing property reads as empty.</summary>
     public static List<long> GetIds(this JsonElement p, string name = "trackIds") =>
         p.ValueKind == JsonValueKind.Object && p.TryGetProperty(name, out var array) && array.ValueKind == JsonValueKind.Array

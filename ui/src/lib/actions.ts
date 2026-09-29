@@ -31,6 +31,12 @@ export const openSkipsEditor = (at: Point = cursorAnchor()) => ui.openSkipsEdito
 
 export const openInfoEditor = (at: Point = cursorAnchor()) => ui.openInfoEditor(library.selectedIds(), at)
 
+/** Opens the start and end editor for the one selected song. */
+export function openTrimEditor() {
+  const ids = library.selectedIds()
+  if (ids.length === 1) ui.openTrimEditor(ids[0])
+}
+
 export function openRowMenu(at: Point, index: number) {
   library.contextSelect(index)
   const count = library.selectedCount
@@ -59,6 +65,12 @@ export function openRowMenu(at: Point, index: number) {
       label: count > 1 ? `Edit info of ${songs(count)}…` : 'Edit info…',
       shortcut: keymap.label('selection.edit'),
       action: () => openInfoEditor(at),
+    },
+    {
+      label: 'Edit start and end…',
+      shortcut: keymap.label('selection.trim'),
+      disabled: count !== 1,
+      action: openTrimEditor,
     },
     { label: count > 1 ? `Tag ${songs(count)}…` : 'Tag…', shortcut: keymap.label('selection.tag'), action: () => openTagPicker(at) },
     { label: 'Add to playlist…', shortcut: keymap.label('selection.playlist'), action: () => openPlaylistPicker(at) },

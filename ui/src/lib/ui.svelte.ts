@@ -70,6 +70,8 @@ class Ui {
   infoEditor = $state<(Point & { trackIds: number[] }) | null>(null)
   confirm = $state<Confirm | null>(null)
   importReport = $state<ImportReport | null>(null)
+  /** The start and end editor, with the waveform of one song. */
+  trimEditor = $state<{ trackId: number } | null>(null)
   /** The sidebar item showing an inline name editor. */
   renaming = $state<{ kind: 'tag' | 'playlist'; id: number } | null>(null)
   palette = $state(false)
@@ -103,6 +105,7 @@ class Ui {
       this.infoEditor !== null ||
       this.confirm !== null ||
       this.importReport !== null ||
+      this.trimEditor !== null ||
       this.palette ||
       this.settings !== null
     )
@@ -132,6 +135,7 @@ class Ui {
     this.skipsEditor = null
     this.infoEditor = null
     this.confirm = null
+    this.trimEditor = null
     this.menu = { ...at, items }
   }
 
@@ -145,6 +149,7 @@ class Ui {
     this.skipsEditor = null
     this.infoEditor = null
     this.confirm = null
+    this.trimEditor = null
     this.picker = { mode, trackIds, ...at }
   }
 
@@ -158,6 +163,7 @@ class Ui {
     this.skipsEditor = null
     this.infoEditor = null
     this.confirm = null
+    this.trimEditor = null
     this.bpmEditor = { trackIds, ...at }
   }
 
@@ -171,6 +177,7 @@ class Ui {
     this.bpmEditor = null
     this.infoEditor = null
     this.confirm = null
+    this.trimEditor = null
     this.skipsEditor = { trackIds, ...at }
   }
 
@@ -184,6 +191,7 @@ class Ui {
     this.bpmEditor = null
     this.skipsEditor = null
     this.confirm = null
+    this.trimEditor = null
     this.infoEditor = { trackIds, ...at }
   }
 
@@ -196,6 +204,7 @@ class Ui {
     this.bpmEditor = null
     this.skipsEditor = null
     this.infoEditor = null
+    this.trimEditor = null
     this.confirm = confirm
   }
 
@@ -207,6 +216,13 @@ class Ui {
   }
 
   closeImportReport = () => (this.importReport = null)
+
+  openTrimEditor(trackId: number) {
+    this.closeAll()
+    this.trimEditor = { trackId }
+  }
+
+  closeTrimEditor = () => (this.trimEditor = null)
 
   openPalette() {
     this.closeAll()
@@ -230,6 +246,7 @@ class Ui {
     this.infoEditor = null
     this.confirm = null
     this.importReport = null
+    this.trimEditor = null
     this.renaming = null
     this.closeDialogs()
   }

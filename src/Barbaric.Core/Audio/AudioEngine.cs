@@ -6,14 +6,18 @@ namespace Barbaric.Core.Audio;
 /// <summary>
 /// Plays one track at a time. Owns the decoder and the output device, and applies the track's
 /// automatic gain (which evens out volume between songs) and the user's own gain, both in dB,
-/// combined with a master volume.
+/// combined with a master volume. Plays only the track's range (see <see cref="SetRange"/>), so
+/// silence or parts the user cut off are skipped; positions stay in the file's own time.
 /// </summary>
 public sealed class AudioEngine : IDisposable
 {
     private readonly Func<Task<IWavePlayer>> _outputFactory;
     private readonly object _sync = new();
     private WaveStream? _reader;
+    private RangeSampleProvider? _range;
     private GainSampleProvider? _chain;
+    private TimeSpan _rangeStart;
+    private TimeSpan? _rangeEnd;
     private IWavePlayer? _output;
     private Task<IWavePlayer>? _pendingOutput;
     private int _generation;
@@ -65,6 +69,24 @@ public sealed class AudioEngine : IDisposable
             lock (_sync)
             {
                 return _reader?.CurrentTime ?? TimeSpan.Zero;
+            }
+        }
+    }
+
+    /// <summary>Where the loaded track starts playing.</summary>
+    public TimeSpan RangeStart => Clamp(_rangeStart, Duration);
+
+    /// <summary>Where the loaded track stops playing.</summary>
+    public TimeSpan RangeEnd => _rangeEnd is { } end ? Clamp(end, Duration) : Duration;
+
+    /// <summary>True from loading or rewinding the track until it starts playing or is moved.</summary>
+    public bool AtStart
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _range?.AtStart ?? true;
             }
         }
     }
@@ -128,18 +150,49 @@ public sealed class AudioEngine : IDisposable
 
     public const float MinVolumeLimit = 0.01f;
 
-    public void Load(string path, double trackGainDb = 0, double autoGainDb = 0)
+    /// <summary>Opens a track, ready to play from <paramref name="start"/> to <paramref name="end"/> (null: the file's end).</summary>
+    public void Load(string path, double trackGainDb = 0, double autoGainDb = 0, TimeSpan start = default, TimeSpan? end = null)
     {
         var reader = AudioDecoder.Open(path);
         CloseCurrent();
 
-        _reader = reader;
-        _chain = new GainSampleProvider(reader.ToSampleProvider(), _sync);
+        lock (_sync)
+        {
+            _reader = reader;
+            _range = new RangeSampleProvider(reader, reader.ToSampleProvider());
+        }
+
+        _chain = new GainSampleProvider(_range, _sync);
         _trackGainDb = Gain.ClampDb(trackGainDb);
         _autoGainDb = Gain.ClampDb(autoGainDb);
         ApplyGain();
         CurrentPath = path;
+        SetRange(start, end);
         SetState(PlayerState.Stopped, force: true);
+    }
+
+    /// <summary>
+    /// Sets the part of the track that plays; null <paramref name="end"/> plays to the file's end. Takes
+    /// effect while playing; it moves the position only when it falls outside the new range, and to the
+    /// start only when the track hasn't started playing.
+    /// </summary>
+    public void SetRange(TimeSpan start, TimeSpan? end)
+    {
+        _rangeStart = start < TimeSpan.Zero ? TimeSpan.Zero : start;
+        _rangeEnd = end is { } e && e > _rangeStart ? e : null;
+        lock (_sync)
+        {
+            if (_reader is null || _range is null)
+            {
+                return;
+            }
+
+            _range.SetEnd(_rangeEnd is null ? null : RangeEnd);
+            if (_range.AtStart || _reader.CurrentTime < RangeStart)
+            {
+                Rewind();
+            }
+        }
     }
 
     public async Task PlayAsync()
@@ -149,9 +202,9 @@ public sealed class AudioEngine : IDisposable
             throw new InvalidOperationException("No track loaded.");
         }
 
-        if (Position >= Duration)
+        if (AtEnd)
         {
-            Seek(TimeSpan.Zero);
+            Rewind();
         }
 
         if (_output is null)
@@ -210,12 +263,27 @@ public sealed class AudioEngine : IDisposable
         return PlayAsync();
     }
 
-    /// <summary>Pauses output and rewinds to the start. Does not raise <see cref="TrackEnded"/>.</summary>
+    /// <summary>Pauses output and rewinds to the start of the range. Does not raise <see cref="TrackEnded"/>.</summary>
     public void Stop()
     {
         _output?.Pause();
-        Seek(TimeSpan.Zero);
+        Rewind();
         SetState(PlayerState.Stopped);
+    }
+
+    /// <summary>Goes back to the start of the range, as if the track was just loaded.</summary>
+    public void Rewind()
+    {
+        lock (_sync)
+        {
+            if (_reader is null || _range is null)
+            {
+                return;
+            }
+
+            _reader.CurrentTime = RangeStart;
+            _range.Sync(toStart: true);
+        }
     }
 
     /// <summary>Stops and closes the current file so it can be moved or deleted.</summary>
@@ -225,23 +293,38 @@ public sealed class AudioEngine : IDisposable
         SetState(PlayerState.Stopped, force: true);
     }
 
+    /// <summary>Moves within the range; a position outside it goes to its nearest end.</summary>
     public void Seek(TimeSpan position)
     {
         lock (_sync)
         {
-            if (_reader is null)
+            if (_reader is null || _range is null)
             {
                 return;
             }
 
-            var clamped = position < TimeSpan.Zero ? TimeSpan.Zero
-                : position > _reader.TotalTime ? _reader.TotalTime
-                : position;
-            _reader.CurrentTime = clamped;
+            var start = RangeStart;
+            var end = RangeEnd;
+            _reader.CurrentTime = position < start ? start : position > end ? end : position;
+            _range.Sync(toStart: false);
         }
     }
 
     public void Dispose() => CloseCurrent();
+
+    /// <summary>Whether the track has played to the end of its range.</summary>
+    private bool AtEnd
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _reader is null || _range is null || _range.Finished || _reader.CurrentTime >= _reader.TotalTime;
+            }
+        }
+    }
+
+    private static TimeSpan Clamp(TimeSpan time, TimeSpan duration) => time > duration ? duration : time;
 
     private async Task<IWavePlayer> CreateOutputAsync(ISampleProvider chain)
     {
@@ -305,6 +388,7 @@ public sealed class AudioEngine : IDisposable
         {
             _reader?.Dispose();
             _reader = null;
+            _range = null;
         }
 
         _chain = null;

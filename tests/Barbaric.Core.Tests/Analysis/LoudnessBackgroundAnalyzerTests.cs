@@ -112,6 +112,27 @@ public sealed class LoudnessBackgroundAnalyzerTests : IAsyncLifetime
         Assert.Equal(0, await _library.Tracks.CountLoudnessPendingAsync());
     }
 
+    [Fact]
+    public async Task SilenceEdges_AreStored_AndAChangedFileLosesThem_ButKeepsTheUsersTimes()
+    {
+        _fake = _ => new LoudnessResult(-10, -1, [new SilenceEdge(-50, 100, 400)]);
+        using var analyzer = Create();
+        analyzer.Start();
+        await analyzer.Idle;
+        await _library.Tracks.SetTrimAsync(_ids["Song 1"], 50, null);
+
+        Assert.Equal([new SilenceEdge(-50, 100, 400)], (await _library.Tracks.GetAsync(_ids["Song 1"]))!.Edges!);
+        Assert.Equal(Silence.ToJson([new SilenceEdge(-50, 100, 400)]), _results.First(r => r.Id == _ids["Song 1"]).SilenceEdges);
+
+        var path = _library.AddSong("a.wav", title: "Song 1", seconds: 1);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+        await _library.Scanner.ScanAsync();
+
+        var song = (await _library.Tracks.GetAsync(_ids["Song 1"]))!;
+        Assert.Null(song.Edges);
+        Assert.Equal((50L, (long?)null), (song.TrimStartMs!.Value, song.TrimEndMs));
+    }
+
     private LoudnessBackgroundAnalyzer Create()
     {
         var analyzer = new LoudnessBackgroundAnalyzer(_library.Tracks, (path, _) =>

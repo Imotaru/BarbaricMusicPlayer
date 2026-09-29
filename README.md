@@ -2,6 +2,7 @@
 
 A lightweight Windows music player for local files. Features:
 - a volume setting per song
+- silence skipping, and your own start and end time per song, set on its waveform
 - BPM detection, plus filtering by BPM range
 - tag-based playlists
 - instant search
@@ -75,6 +76,21 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
   - "+?" also keeps songs whose BPM isn't known.
   - The range stays set as you switch views. Changing it re-filters the queue, and the song that is playing carries on.
 
+## Silence, start and end
+
+- **Skipping silence:** songs start where their sound starts and move on where it ends. The edges are found in the same background pass that measures each song's volume, and a song is only measured once.
+  - A little room is left around the sound (0.1 s before, 0.3 s after), so soft attacks and fading tails aren't cut.
+  - Settings → Playback turns it off, and sets how quiet counts as silence (-70 to -30 dB, default -50). Changing the level takes effect at once, without measuring again.
+  - A song that is quieter than the level all the way through plays whole.
+  - The seek bar shows the parts that are skipped as a fainter track.
+- **Your own start and end:** right-click a song → **Edit start and end…** to open its waveform.
+  - Drag the Start and End lines, nudge them with the arrow keys (Shift for bigger steps), or type the times.
+  - Scroll to zoom and drag to move around. The strip on top shows the whole song, and dashed lines mark where the silence is.
+  - "Preview start" plays the first seconds from the start line, "Preview end" the last seconds up to the end line, and a click on the waveform plays from there. Space starts or stops a preview.
+  - The song that's playing pauses while you preview and carries on when the editor closes. Previews never count as plays or skips.
+  - A time left where the silence puts it keeps following the silence. "Reset to automatic" goes back to that. Your own times apply even with silence skipping off.
+- **Counting plays:** plays and skips are measured within the part that plays, so skipped silence doesn't count as listening.
+
 ## Tags and playlists
 
 - **Selecting:** Ctrl+click toggles a song, Shift+click selects a range, and Ctrl+A selects the whole list. Right-click for a menu; "Reveal in File Explorer" there opens each song's folder with its file selected.
@@ -114,8 +130,8 @@ Then run `src/Barbaric.App` in Debug mode (from Visual Studio or Rider, or with 
 
 - **Export** (Settings → Backup, or "Export backup…" in the command palette) saves a readable JSON file with:
   - tags (with their colours) and playlists, in order;
-  - each song's info edits, BPM, volume, plays, skips, last played, hidden flag and play history;
-  - the theme, accent, keyboard shortcuts, global hotkeys, volume and loop setting.
+  - each song's info edits, BPM, volume, start and end times, plays, skips, last played, hidden flag and play history;
+  - the theme, accent, keyboard shortcuts, global hotkeys, volume, loop and silence settings.
 
   Music folders, window placement and the queue belong to one PC and are left out.
 - **Import** merges a backup into the library, after showing what it holds:

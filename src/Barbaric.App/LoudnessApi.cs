@@ -107,7 +107,7 @@ public sealed class LoudnessApi : IDisposable
 
     private void OnAnalyzed(object? sender, LoudnessInfo info) => _dispatcher.BeginInvoke(() =>
     {
-        if (_controller.UpdateLoudness(info.Id, info.LoudnessLufs, info.PeakDb))
+        if (_controller.UpdateLoudness(info.Id, info.LoudnessLufs, info.PeakDb, info.SilenceEdges))
         {
             _player.RefreshState();
         }

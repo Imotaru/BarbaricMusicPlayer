@@ -6,8 +6,9 @@ namespace Barbaric.Core.Analysis;
 /// <summary>
 /// How loud a song gets: <see cref="LoudPartLufs"/> is the loudness of its loud parts (see
 /// <see cref="LoudnessAnalyzer"/>) and <see cref="PeakDb"/> its loudest sample, in dB below full scale.
+/// <see cref="Edges"/> are where its sound starts and ends at each <see cref="Silence"/> threshold.
 /// </summary>
-public sealed record LoudnessResult(double LoudPartLufs, double PeakDb);
+public sealed record LoudnessResult(double LoudPartLufs, double PeakDb, IReadOnlyList<SilenceEdge>? Edges = null);
 
 /// <summary>
 /// Measures how loud the loud parts of a song are, so songs can be played equally loud. The whole
@@ -15,6 +16,7 @@ public sealed record LoudnessResult(double LoudPartLufs, double PeakDb);
 /// 95th percentile of the non-silent windows is the result. Unlike an average over the whole song, a
 /// long quiet intro doesn't make a song that then gets loud count as quiet, and unlike the sample
 /// peak, a single drum hit doesn't make a quiet song count as loud.
+/// The same pass finds the silence before and after the song, from the unweighted level of 10 ms blocks.
 /// </summary>
 public static class LoudnessAnalyzer
 {
@@ -26,6 +28,11 @@ public static class LoudnessAnalyzer
 
     private const int BlocksPerSecond = 10;
     private const int BlocksPerWindow = 30;
+
+    private const int EdgeBlocksPerSecond = 100;
+
+    /// <summary>Songs whose sound would last less than this at a threshold aren't trimmed at it.</summary>
+    private const long MinSoundMs = 1000;
 
     /// <summary>Decodes the whole file and measures it.</summary>
     /// <returns>The loudness, or null when the song is silent.</returns>
@@ -60,6 +67,7 @@ public static class LoudnessAnalyzer
     private sealed class Meter
     {
         private readonly int _channels;
+        private readonly int _sampleRate;
         private readonly int _blockFrames;
         private readonly double[] _weights;
         private readonly KWeighting[] _filters;
@@ -73,9 +81,23 @@ public static class LoudnessAnalyzer
         private double _allEnergy;
         private float _peak;
 
+        // Silence edges: the first and last 10 ms block at or above each threshold's power.
+        private readonly int _edgeBlockFrames;
+        private readonly double[] _thresholds = [.. Silence.Thresholds.Select(db => Math.Pow(10, db / 10.0))];
+        private readonly long[] _firstSound;
+        private readonly long[] _lastSound;
+        private double _edgePower;
+        private int _framesInEdgeBlock;
+        private long _edgeBlocks;
+        private long _frames;
+
         public Meter(int channels, int sampleRate)
         {
             _channels = channels;
+            _sampleRate = sampleRate;
+            _edgeBlockFrames = Math.Max(1, sampleRate / EdgeBlocksPerSecond);
+            _firstSound = [.. _thresholds.Select(_ => -1L)];
+            _lastSound = new long[_thresholds.Length];
             _blockFrames = Math.Max(1, sampleRate / BlocksPerSecond);
             _weights = ChannelWeights(channels);
             _filters = [.. Enumerable.Range(0, channels).Select(_ => new KWeighting(sampleRate))];
@@ -90,13 +112,20 @@ public static class LoudnessAnalyzer
                 {
                     var sample = interleaved[i + c];
                     _peak = Math.Max(_peak, Math.Abs(sample));
+                    _edgePower += sample * sample;
                     var weighted = _filters[c].Process(sample);
                     _blockEnergy[c] += weighted * weighted;
                 }
 
+                _frames++;
                 if (++_framesInBlock == _blockFrames)
                 {
                     EndBlock();
+                }
+
+                if (++_framesInEdgeBlock == _edgeBlockFrames)
+                {
+                    EndEdgeBlock();
                 }
             }
         }
@@ -134,7 +163,54 @@ public static class LoudnessAnalyzer
                 }
             }
 
-            return new LoudnessResult(Math.Round(loudness, 2), Math.Round(20 * Math.Log10(_peak), 2));
+            return new LoudnessResult(Math.Round(loudness, 2), Math.Round(20 * Math.Log10(_peak), 2), Edges());
+        }
+
+        private IReadOnlyList<SilenceEdge> Edges()
+        {
+            if (_framesInEdgeBlock > 0)
+            {
+                EndEdgeBlock();
+            }
+
+            var totalMs = Ms(_frames);
+            var edges = new List<SilenceEdge>(_thresholds.Length);
+            for (var i = 0; i < _thresholds.Length; i++)
+            {
+                var db = Silence.Thresholds[i];
+                var start = Math.Max(0, Ms(_firstSound[i] * _edgeBlockFrames) - Silence.LeadMs);
+                var end = Math.Min(totalMs, Ms(Math.Min(_frames, (_lastSound[i] + 1) * _edgeBlockFrames)) + Silence.TailMs);
+
+                // Nothing, or next to nothing, that loud: the whole song is kept rather than skipped.
+                edges.Add(_firstSound[i] < 0 || end - start < MinSoundMs
+                    ? new SilenceEdge(db, 0, totalMs)
+                    : new SilenceEdge(db, start, end));
+            }
+
+            return edges;
+        }
+
+        private long Ms(long frames) => (long)Math.Round(frames * 1000.0 / _sampleRate);
+
+        private void EndEdgeBlock()
+        {
+            var power = _edgePower / (_framesInEdgeBlock * (double)_channels);
+            for (var i = 0; i < _thresholds.Length; i++)
+            {
+                if (power >= _thresholds[i])
+                {
+                    if (_firstSound[i] < 0)
+                    {
+                        _firstSound[i] = _edgeBlocks;
+                    }
+
+                    _lastSound[i] = _edgeBlocks;
+                }
+            }
+
+            _edgePower = 0;
+            _framesInEdgeBlock = 0;
+            _edgeBlocks++;
         }
 
         private void EndBlock()

@@ -92,6 +92,15 @@ public sealed class TrackRepository(LibraryDatabase database)
         await connection.ExecuteAsync("UPDATE tracks SET gain_db = @gainDb WHERE id = @id", new { id, gainDb });
     }
 
+    /// <summary>Sets where the song starts and ends playing; null follows its silence.</summary>
+    public async Task SetTrimAsync(long id, long? startMs, long? endMs)
+    {
+        using var connection = database.Open();
+        await connection.ExecuteAsync(
+            "UPDATE tracks SET trim_start_ms = @startMs, trim_end_ms = @endMs WHERE id = @id",
+            new { id, startMs, endMs });
+    }
+
     /// <summary>Fills in a length the file's tags didn't give, e.g. from the decoder. A known length is kept.</summary>
     public async Task SetDurationAsync(long id, long durationMs)
     {
@@ -185,8 +194,11 @@ public sealed class TrackRepository(LibraryDatabase database)
     {
         using var connection = database.Open();
         var changed = await connection.ExecuteAsync(
-            "UPDATE tracks SET loudness_lufs = @loudness, peak_db = @peak, loudness_analyzed = 1 WHERE id = @id",
-            new { id, loudness = result?.LoudPartLufs, peak = result?.PeakDb });
+            """
+            UPDATE tracks SET loudness_lufs = @loudness, peak_db = @peak, silence_edges = @edges, loudness_analyzed = 1
+            WHERE id = @id
+            """,
+            new { id, loudness = result?.LoudPartLufs, peak = result?.PeakDb, edges = Silence.ToJson(result?.Edges) });
         return changed > 0;
     }
 

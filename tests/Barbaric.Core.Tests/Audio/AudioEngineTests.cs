@@ -193,6 +193,89 @@ public sealed class AudioEngineTests : IDisposable
         Assert.Equal(PlayerState.Playing, engine.State);
     }
 
+    [Fact]
+    public async Task Range_PlaysOnlyThatPart_ThenEnds()
+    {
+        _engine.Load(_tonePath, start: TimeSpan.FromSeconds(0.5), end: TimeSpan.FromSeconds(1.5));
+        var ended = false;
+        _engine.TrackEnded += (_, _) => ended = true;
+
+        Assert.Equal(0.5, _engine.Position.TotalSeconds, precision: 2);
+        await _engine.PlayAsync();
+        var played = Seconds(_output.DrainToEnd());
+
+        Assert.Equal(1.0, played, precision: 2);
+        Assert.True(ended);
+    }
+
+    [Fact]
+    public async Task Range_FadesOutAtItsEnd()
+    {
+        _engine.Load(_tonePath, end: TimeSpan.FromSeconds(1));
+        await _engine.PlayAsync();
+        var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_output.DrainToEnd());
+
+        Assert.True(Math.Abs(samples[^1]) < 0.01f);
+        Assert.True(Math.Abs(samples[^2]) < 0.01f);
+    }
+
+    [Fact]
+    public void Seek_StaysWithinTheRange()
+    {
+        _engine.Load(_tonePath, start: TimeSpan.FromSeconds(0.5), end: TimeSpan.FromSeconds(1.5));
+
+        _engine.Seek(TimeSpan.Zero);
+        Assert.Equal(0.5, _engine.Position.TotalSeconds, precision: 2);
+
+        _engine.Seek(TimeSpan.FromSeconds(1));
+        Assert.Equal(1, _engine.Position.TotalSeconds, precision: 2);
+
+        _engine.Seek(TimeSpan.FromSeconds(10));
+        Assert.Equal(1.5, _engine.Position.TotalSeconds, precision: 2);
+    }
+
+    [Fact]
+    public async Task SetRange_BeforePlaying_MovesToTheNewStart_AndReplayStartsThere()
+    {
+        _engine.Load(_tonePath);
+        _engine.SetRange(TimeSpan.FromSeconds(1.5), null);
+
+        Assert.True(_engine.AtStart);
+        Assert.Equal(1.5, _engine.Position.TotalSeconds, precision: 2);
+
+        await _engine.PlayAsync();
+        Assert.Equal(0.5, Seconds(_output.DrainToEnd()), precision: 2);
+
+        await _engine.PlayAsync();
+        Assert.Equal(1.5, _engine.Position.TotalSeconds, precision: 2);
+    }
+
+    [Fact]
+    public void SetRange_AfterAMove_KeepsThePositionInsideTheRange()
+    {
+        _engine.Load(_tonePath);
+        _engine.Seek(TimeSpan.FromSeconds(1));
+        Assert.False(_engine.AtStart);
+
+        _engine.SetRange(TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1.8));
+        Assert.Equal(1, _engine.Position.TotalSeconds, precision: 2);
+
+        _engine.Stop();
+        Assert.Equal(0.5, _engine.Position.TotalSeconds, precision: 2);
+        Assert.Equal(1.8, _engine.RangeEnd.TotalSeconds, precision: 2);
+    }
+
+    [Fact]
+    public void Range_BeyondTheFile_IsCappedAtItsLength()
+    {
+        _engine.Load(_tonePath, start: TimeSpan.FromSeconds(0.2), end: TimeSpan.FromMinutes(10));
+
+        Assert.Equal(_engine.Duration, _engine.RangeEnd);
+    }
+
+    /// <summary>How long a drained stereo 44.1 kHz float stream plays.</summary>
+    private static double Seconds(byte[] ieeeFloatBytes) => ieeeFloatBytes.Length / (4.0 * 2 * 44100);
+
     private static float Peak(byte[] ieeeFloatBytes)
     {
         var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(ieeeFloatBytes);

@@ -62,6 +62,9 @@ public sealed class SettingsTests : IDisposable
                 ALTER TABLE tracks DROP COLUMN loudness_lufs;
                 ALTER TABLE tracks DROP COLUMN peak_db;
                 ALTER TABLE tracks DROP COLUMN loudness_analyzed;
+                ALTER TABLE tracks DROP COLUMN silence_edges;
+                ALTER TABLE tracks DROP COLUMN trim_start_ms;
+                ALTER TABLE tracks DROP COLUMN trim_end_ms;
                 PRAGMA user_version = 3;
                 """);
         }
@@ -70,7 +73,7 @@ public sealed class SettingsTests : IDisposable
         new SettingsRepository(reopened).Set("volume", 0.5);
 
         using var check = reopened.Open();
-        Assert.Equal(6, check.ExecuteScalar<long>("PRAGMA user_version;"));
+        Assert.Equal(7, check.ExecuteScalar<long>("PRAGMA user_version;"));
         Assert.Equal(0.5, new SettingsRepository(reopened).Get<double>("volume"));
     }
 }

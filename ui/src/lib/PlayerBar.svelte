@@ -7,6 +7,13 @@
   let scrubbing = $state<number | null>(null)
   const shownPosition = $derived(scrubbing ?? player.position)
   const progress = $derived(player.duration > 0 ? (shownPosition / player.duration) * 100 : 0)
+
+  // The parts skipped as silence or cut off by the user show as a fainter track.
+  const playEnd = $derived(player.playEnd || player.duration)
+  const rangeStart = $derived(player.duration > 0 ? (player.playStart / player.duration) * 100 : 0)
+  const rangeEnd = $derived(player.duration > 0 ? (playEnd / player.duration) * 100 : 100)
+  const trimmed = $derived(player.loaded && (player.playStart > 0.05 || playEnd < player.duration - 0.05))
+  const clampToRange = (seconds: number) => Math.min(Math.max(seconds, player.playStart), playEnd)
   const gainProgress = $derived(((player.trackGainDb - GAIN_MIN_DB) / (GAIN_MAX_DB - GAIN_MIN_DB)) * 100)
   const songGainTitle = $derived.by(() => {
     const base = 'Volume for this song only — remembered per song. Double-click to reset.'
@@ -127,7 +134,14 @@ Adjusts on top of the automatic level (${auto}) that evens it out with other son
         value={shownPosition}
         disabled={!player.loaded}
         style:--progress="{progress}%"
-        oninput={(e) => (scrubbing = e.currentTarget.valueAsNumber)}
+        style:--start="{rangeStart}%"
+        style:--end="{rangeEnd}%"
+        title={trimmed ? `Plays ${formatTime(player.playStart)}–${formatTime(playEnd)}; the rest is skipped` : undefined}
+        oninput={(e) => {
+          const seconds = clampToRange(e.currentTarget.valueAsNumber)
+          e.currentTarget.valueAsNumber = seconds
+          scrubbing = seconds
+        }}
         onchange={(e) => {
           player.seek(e.currentTarget.valueAsNumber)
           scrubbing = null
@@ -327,6 +341,25 @@ Adjusts on top of the automatic level (${auto}) that evens it out with other son
     grid-template-columns: 44px 1fr 44px;
     align-items: center;
     gap: 10px;
+  }
+
+  .seek input {
+    --start: 0%;
+    --end: 100%;
+  }
+
+  .seek input::-webkit-slider-runnable-track {
+    background: linear-gradient(
+      to right,
+      var(--skipped) 0 var(--start),
+      var(--accent) var(--start) var(--progress),
+      var(--track) var(--progress) var(--end),
+      var(--skipped) var(--end)
+    );
+  }
+
+  .seek {
+    --skipped: color-mix(in srgb, var(--track) 35%, transparent);
   }
 
   .time {

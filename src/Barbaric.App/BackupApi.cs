@@ -14,7 +14,7 @@ public sealed class BackupApi
 
     /// <summary>The settings a backup carries. Window placement, the queue and the background belong to this PC or follow the theme.</summary>
     private static readonly string[] SettingsKeys =
-        [MainWindow.UiKey, PlayerApi.VolumeKey, PlayerApi.VolumeLimitKey, PlayerApi.LoopTrackKey, PlayerApi.NormalizeKey, PlayerApi.WeighByLengthKey, PlayerApi.WeighBySkipsKey, GlobalHotkeys.SettingsKey];
+        [MainWindow.UiKey, PlayerApi.VolumeKey, PlayerApi.VolumeLimitKey, PlayerApi.LoopTrackKey, PlayerApi.NormalizeKey, PlayerApi.WeighByLengthKey, PlayerApi.WeighBySkipsKey, PlayerApi.SkipSilenceKey, PlayerApi.SilenceThresholdKey, GlobalHotkeys.SettingsKey];
 
     private readonly LibraryBackup _backup;
     private readonly LibraryApi _library;

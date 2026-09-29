@@ -1,5 +1,6 @@
 using System.Data;
 using System.Text.Json;
+using Barbaric.Core.Analysis;
 using Barbaric.Core.Playback;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -52,7 +53,7 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
             """
             SELECT id, path, file_name, fingerprint, file_size, duration_ms, title, artist, album, album_artist, genre,
                    year, track_number, overrides, bpm, bpm_source, bpm_confidence, gain_db, loudness_lufs, peak_db,
-                   loudness_analyzed, play_count, skip_count, last_played_utc, added_utc, flagged, hidden
+                   silence_edges, loudness_analyzed, trim_start_ms, trim_end_ms, play_count, skip_count, last_played_utc, added_utc, flagged, hidden
             FROM tracks ORDER BY id
             """,
             transaction: transaction);
@@ -77,7 +78,9 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
             BpmSource = t.BpmSource,
             BpmConfidence = t.BpmConfidence,
             GainDb = t.GainDb,
-            Loudness = t.LoudnessAnalyzed ? new BackupLoudness(t.LoudnessLufs, t.PeakDb) : null,
+            Loudness = t.LoudnessAnalyzed ? new BackupLoudness(t.LoudnessLufs, t.PeakDb, Silence.FromJson(t.SilenceEdges)) : null,
+            TrimStartMs = t.TrimStartMs,
+            TrimEndMs = t.TrimEndMs,
             Plays = t.PlayCount,
             Skips = t.SkipCount,
             LastPlayed = t.LastPlayedUtc is { } played ? Time(played) : null,
@@ -254,6 +257,8 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
             id,
             overrides = OverridesJson(edited),
             gainDb = song.GainDb,
+            trimStart = song.TrimStartMs,
+            trimEnd = song.TrimEndMs,
             plays = Math.Max(0, song.Plays),
             skips = Math.Max(0, song.Skips),
             lastPlayed = song.LastPlayed?.UtcTicks,
@@ -264,7 +269,7 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
 
         var set = new List<string>
         {
-            "overrides = @overrides", "gain_db = @gainDb", "play_count = @plays", "skip_count = @skips",
+            "overrides = @overrides", "gain_db = @gainDb", "trim_start_ms = @trimStart", "trim_end_ms = @trimEnd", "play_count = @plays", "skip_count = @skips",
             "last_played_utc = @lastPlayed", "added_utc = min(added_utc, @added)", "flagged = @flagged", "hidden = @hidden",
         };
 
@@ -295,11 +300,14 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
             set.Add("""
                 loudness_lufs = CASE WHEN fingerprint = @fingerprint THEN @loudness ELSE loudness_lufs END,
                 peak_db = CASE WHEN fingerprint = @fingerprint THEN @peak ELSE peak_db END,
-                loudness_analyzed = CASE WHEN fingerprint = @fingerprint THEN 1 ELSE loudness_analyzed END
+                silence_edges = CASE WHEN fingerprint = @fingerprint THEN @silence ELSE silence_edges END,
+                loudness_analyzed = CASE WHEN fingerprint = @fingerprint THEN @analyzed ELSE loudness_analyzed END
                 """);
             parameters.Add("fingerprint", song.Fingerprint);
             parameters.Add("loudness", loudness.LoudPartLufs);
             parameters.Add("peak", loudness.PeakDb);
+            parameters.Add("silence", Silence.ToJson(loudness.Silence));
+            parameters.Add("analyzed", Measured(loudness));
         }
 
         await connection.ExecuteAsync($"UPDATE tracks SET {string.Join(", ", set)} WHERE id = @id", parameters, transaction);
@@ -313,11 +321,11 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
             """
             INSERT INTO tracks (path, file_name, fingerprint, file_size, modified_utc, title, artist, album, album_artist,
                                 genre, year, track_number, duration_ms, bpm, bpm_confidence, bpm_source, gain_db,
-                                loudness_lufs, peak_db, loudness_analyzed, play_count, skip_count, last_played_utc,
-                                flagged, missing, hidden, added_utc, overrides)
+                                loudness_lufs, peak_db, silence_edges, loudness_analyzed, trim_start_ms, trim_end_ms,
+                                play_count, skip_count, last_played_utc, flagged, missing, hidden, added_utc, overrides)
             VALUES (@path, @fileName, @fingerprint, @fileSize, 0, @title, @artist, @album, @albumArtist,
                     @genre, @year, @trackNumber, @durationMs, @bpm, @bpmConfidence, @bpmSource, @gainDb,
-                    @loudness, @peak, @loudnessAnalyzed, @plays, @skips, @lastPlayed, @flagged, 1, @hidden, @added, @overrides)
+                    @loudness, @peak, @silence, @loudnessAnalyzed, @trimStart, @trimEnd, @plays, @skips, @lastPlayed, @flagged, 1, @hidden, @added, @overrides)
             RETURNING id
             """,
             new
@@ -340,7 +348,10 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
                 gainDb = song.GainDb,
                 loudness = song.Loudness?.LoudPartLufs,
                 peak = song.Loudness?.PeakDb,
-                loudnessAnalyzed = song.Loudness is not null,
+                silence = Silence.ToJson(song.Loudness?.Silence),
+                loudnessAnalyzed = song.Loudness is { } loudness && Measured(loudness),
+                trimStart = song.TrimStartMs,
+                trimEnd = song.TrimEndMs,
                 plays = Math.Max(0, song.Plays),
                 skips = Math.Max(0, song.Skips),
                 lastPlayed = song.LastPlayed?.UtcTicks,
@@ -507,6 +518,12 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
         return values;
     }
 
+    /// <summary>
+    /// Whether a measurement is complete: a backup from before silence was measured has none for a
+    /// song with sound, which is then measured again.
+    /// </summary>
+    private static bool Measured(BackupLoudness loudness) => loudness.Silence is not null || loudness.LoudPartLufs is null;
+
     private static string? OverridesJson(Dictionary<TrackField, object?> edited) =>
         edited.Count == 0 ? null : JsonSerializer.Serialize(edited.ToDictionary(e => TrackFields.Column(e.Key), e => e.Value));
 
@@ -603,7 +620,13 @@ public sealed class LibraryBackup(LibraryDatabase database, TimeProvider? clock 
 
         public double? PeakDb { get; set; }
 
+        public string? SilenceEdges { get; set; }
+
         public bool LoudnessAnalyzed { get; set; }
+
+        public long? TrimStartMs { get; set; }
+
+        public long? TrimEndMs { get; set; }
 
         public long PlayCount { get; set; }
 

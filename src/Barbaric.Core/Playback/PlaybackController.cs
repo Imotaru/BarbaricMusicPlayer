@@ -1,3 +1,4 @@
+using Barbaric.Core.Analysis;
 using Barbaric.Core.Audio;
 using Barbaric.Core.Library;
 
@@ -17,6 +18,9 @@ public sealed class PlaybackController : IDisposable
     /// <summary>"Previous" restarts the current song when it has played longer than this.</summary>
     public static readonly TimeSpan RestartThreshold = TimeSpan.FromSeconds(3);
 
+    /// <summary>The shortest part of a song the user's start and end times can leave.</summary>
+    public const long MinTrimmedMs = 1000;
+
     private readonly AudioEngine _engine;
     private readonly TrackRepository _tracks;
     private readonly PlayStatsRepository _stats;
@@ -29,6 +33,8 @@ public sealed class PlaybackController : IDisposable
 
     /// <summary>The song being listened to, from the moment it starts playing until it is left.</summary>
     private Track? _listening;
+    private bool _skipSilence = true;
+    private int _silenceThresholdDb = Silence.DefaultDb;
 
     /// <param name="context">
     /// Where end-of-song handling runs. Pass the UI context in the app; <c>null</c> runs it inline.
@@ -97,6 +103,31 @@ public sealed class PlaybackController : IDisposable
     /// see <see cref="ReshuffleAsync"/>.
     /// </summary>
     public bool WeighBySkips { get; set; } = true;
+
+    /// <summary>When on, songs start and end where their sound does, skipping silence around it.</summary>
+    public bool SkipSilence
+    {
+        get => _skipSilence;
+        set
+        {
+            _skipSilence = value;
+            ApplyRange();
+        }
+    }
+
+    /// <summary>Anything quieter than this, in dB below full scale, counts as silence; see <see cref="Silence"/>.</summary>
+    public int SilenceThresholdDb
+    {
+        get => _silenceThresholdDb;
+        set
+        {
+            _silenceThresholdDb = Silence.Snap(value);
+            ApplyRange();
+        }
+    }
+
+    /// <summary>The part of the loaded song that plays.</summary>
+    public PlayRange CurrentRange => CurrentTrack?.PlayRange(_skipSilence, _silenceThresholdDb) ?? PlayRange.Whole;
 
     /// <summary>
     /// Whether Next has somewhere to go. A list always does: after its last song it starts over.
@@ -174,10 +205,10 @@ public sealed class PlaybackController : IDisposable
 
     public async Task PreviousAsync()
     {
-        if (_engine.Position > RestartThreshold || !Queue.MovePrevious())
+        if (_engine.Position - _engine.RangeStart > RestartThreshold || !Queue.MovePrevious())
         {
             await FinishListeningAsync(LeaveReason.Back);
-            _engine.Seek(TimeSpan.Zero);
+            _engine.Rewind();
             BeginListening();
             return;
         }
@@ -329,7 +360,7 @@ public sealed class PlaybackController : IDisposable
 
             if (await _tracks.GetAsync(id) is { } track && TryLoad(track, reportErrors: false))
             {
-                if (track.Id == position.CurrentId && seek > TimeSpan.Zero && seek < _engine.Duration)
+                if (track.Id == position.CurrentId && seek > _engine.RangeStart && seek < _engine.RangeEnd)
                 {
                     _engine.Seek(seek);
                 }
@@ -364,6 +395,34 @@ public sealed class PlaybackController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sets where a song starts and ends playing; null follows its silence. Times are kept within the
+    /// song's length and at least <see cref="MinTrimmedMs"/> apart. A playing song picks them up at once.
+    /// </summary>
+    /// <returns>False when the song doesn't exist.</returns>
+    public async Task<bool> SetTrimAsync(long id, long? startMs, long? endMs)
+    {
+        var track = CurrentTrack?.Id == id ? CurrentTrack : await _tracks.GetAsync(id);
+        if (track is null)
+        {
+            return false;
+        }
+
+        var length = track.DurationMs > 0 ? track.DurationMs : long.MaxValue;
+        startMs = startMs is { } s ? Math.Clamp(s, 0, Math.Max(0, length - MinTrimmedMs)) : null;
+        endMs = endMs is { } e ? Math.Clamp(e, (startMs ?? 0) + MinTrimmedMs, length) : null;
+        await _tracks.SetTrimAsync(id, startMs, endMs);
+        track.TrimStartMs = startMs;
+        track.TrimEndMs = endMs;
+        if (track == CurrentTrack)
+        {
+            ApplyRange();
+            TrackUpdated?.Invoke(this, track);
+        }
+
+        return true;
+    }
+
     /// <summary>Picks up edited details (title, artist, …) of the loaded song when it is among <paramref name="ids"/>.</summary>
     public async Task RefreshCurrentTrackAsync(IReadOnlyCollection<long> ids)
     {
@@ -386,9 +445,10 @@ public sealed class PlaybackController : IDisposable
     /// <summary>
     /// Takes a new volume measurement of a song. The loaded song picks it up only if it hasn't started
     /// yet, so the volume never jumps mid-song; otherwise it applies the next time the song is loaded.
+    /// Its silence edges apply at once, moving to the new start only if the song hasn't started.
     /// </summary>
     /// <returns>Whether the song is the loaded one.</returns>
-    public bool UpdateLoudness(long id, double? loudnessLufs, double? peakDb)
+    public bool UpdateLoudness(long id, double? loudnessLufs, double? peakDb, string? silenceEdges = null)
     {
         if (CurrentTrack is not { } track || track.Id != id)
         {
@@ -397,12 +457,14 @@ public sealed class PlaybackController : IDisposable
 
         track.LoudnessLufs = loudnessLufs;
         track.PeakDb = peakDb;
+        track.SilenceEdges = silenceEdges;
         track.LoudnessAnalyzed = true;
-        if (_engine.State != PlayerState.Playing && _engine.Position == TimeSpan.Zero)
+        if (_engine.State != PlayerState.Playing && _engine.AtStart)
         {
             _engine.AutoGainDb = track.AutoGainDb;
         }
 
+        ApplyRange();
         return true;
     }
 
@@ -558,7 +620,8 @@ public sealed class PlaybackController : IDisposable
         CurrentTrack = track;
         try
         {
-            _engine.Load(track.Path, track.GainDb, track.AutoGainDb);
+            var range = track.PlayRange(_skipSilence, _silenceThresholdDb);
+            _engine.Load(track.Path, track.GainDb, track.AutoGainDb, Ms(range.StartMs), range.EndMs is { } end ? Ms(end) : null);
         }
         catch (Exception ex)
         {
@@ -580,6 +643,20 @@ public sealed class PlaybackController : IDisposable
         TrackLoaded?.Invoke(this, track);
         return true;
     }
+
+    /// <summary>Plays the loaded song's current range, after the settings or its times changed.</summary>
+    private void ApplyRange()
+    {
+        if (CurrentTrack is null)
+        {
+            return;
+        }
+
+        var range = CurrentRange;
+        _engine.SetRange(Ms(range.StartMs), range.EndMs is { } end ? Ms(end) : null);
+    }
+
+    private static TimeSpan Ms(long ms) => TimeSpan.FromMilliseconds(ms);
 
     /// <summary>Stores a length the decoder found for a file whose tags had none.</summary>
     private async Task SaveDurationAsync(Track track)
@@ -612,9 +689,11 @@ public sealed class PlaybackController : IDisposable
             return;
         }
 
+        // Measured within the part that plays, so skipped silence doesn't count as listening.
         _listening = null;
-        var playedMs = (long)_engine.Position.TotalMilliseconds;
-        var durationMs = (long)_engine.Duration.TotalMilliseconds;
+        var start = _engine.RangeStart;
+        var playedMs = (long)Math.Max(0, (_engine.Position - start).TotalMilliseconds);
+        var durationMs = (long)(_engine.RangeEnd - start).TotalMilliseconds;
         if (durationMs <= 0)
         {
             durationMs = track.DurationMs;

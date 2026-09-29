@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Barbaric.App.Bridge;
+using Barbaric.Core.Analysis;
 using Barbaric.Core.Audio;
 using Barbaric.Core.Library;
 using Barbaric.Core.Playback;
@@ -40,6 +41,8 @@ public sealed class PlayerApi : IDisposable
     internal const string NormalizeKey = "normalize";
     internal const string WeighByLengthKey = "weighByLength";
     internal const string WeighBySkipsKey = "weighBySkips";
+    internal const string SkipSilenceKey = "skipSilence";
+    internal const string SilenceThresholdKey = "silenceThresholdDb";
 
     private readonly AudioEngine _engine;
     private readonly PlaybackController _controller;
@@ -74,6 +77,8 @@ public sealed class PlayerApi : IDisposable
         _engine.Normalize = settings.Get<bool?>(NormalizeKey) ?? true;
         _controller.WeighByLength = settings.Get<bool?>(WeighByLengthKey) ?? true;
         _controller.WeighBySkips = settings.Get<bool?>(WeighBySkipsKey) ?? true;
+        _controller.SkipSilence = settings.Get<bool?>(SkipSilenceKey) ?? true;
+        _controller.SilenceThresholdDb = settings.Get<int?>(SilenceThresholdKey) ?? Silence.DefaultDb;
 
         bridge.Query("player.getState", _ => Snapshot());
         bridge.QueryAsync("player.openFile", async _ => await OpenFileAsync());
@@ -107,6 +112,8 @@ public sealed class PlayerApi : IDisposable
         bridge.Command("player.setNormalize", p => SetNormalize(p.GetProperty("on").GetBoolean()));
         bridge.CommandAsync("player.setWeighByLength", p => SetWeighByLengthAsync(p.GetProperty("on").GetBoolean()));
         bridge.CommandAsync("player.setWeighBySkips", p => SetWeighBySkipsAsync(p.GetProperty("on").GetBoolean()));
+        bridge.Command("player.setSkipSilence", p => SetSkipSilence(p.GetProperty("on").GetBoolean()));
+        bridge.Command("player.setSilenceThreshold", p => SetSilenceThreshold((int)Math.Round(p.GetProperty("db").GetDouble())));
         bridge.Command("player.seek", p => Seek(TimeSpan.FromSeconds(p.GetProperty("seconds").GetDouble())));
         bridge.CommandAsync("player.setTrackGain", async p =>
         {
@@ -147,7 +154,7 @@ public sealed class PlayerApi : IDisposable
                 snapshot.State == PlayerState.Playing,
 
                 // A restored song waits, stopped, where it was left: to the OS that's paused.
-                loaded && (snapshot.State == PlayerState.Paused || (snapshot.State == PlayerState.Stopped && snapshot.Position > 0)),
+                loaded && (snapshot.State == PlayerState.Paused || (snapshot.State == PlayerState.Stopped && snapshot.Position > snapshot.PlayStart)),
                 TimeSpan.FromSeconds(snapshot.Position),
                 TimeSpan.FromSeconds(snapshot.Duration),
                 snapshot.HasNext,
@@ -237,6 +244,22 @@ public sealed class PlayerApi : IDisposable
             await _controller.ReshuffleAsync();
         }
 
+        EmitState();
+    }
+
+    /// <summary>Skips the silence at the start and end of songs. On unless turned off; remembered across sessions.</summary>
+    public void SetSkipSilence(bool on)
+    {
+        _controller.SkipSilence = on;
+        _settings.Save(SkipSilenceKey, on);
+        EmitState();
+    }
+
+    /// <summary>How quiet counts as silence, in dB, in the steps songs are measured at. Remembered across sessions.</summary>
+    public void SetSilenceThreshold(int db)
+    {
+        _controller.SilenceThresholdDb = db;
+        _settings.Save(SilenceThresholdKey, _controller.SilenceThresholdDb);
         EmitState();
     }
 
@@ -412,6 +435,10 @@ public sealed class PlayerApi : IDisposable
             _engine.Normalize,
             _controller.WeighByLength,
             _controller.WeighBySkips,
+            _controller.SkipSilence,
+            _controller.SilenceThresholdDb,
+            _engine.CurrentPath is null ? 0 : _engine.RangeStart.TotalSeconds,
+            _engine.CurrentPath is null ? 0 : _engine.RangeEnd.TotalSeconds,
             _engine.MasterVolume,
             _engine.VolumeLimit,
             _controller.HasNext,
@@ -437,6 +464,10 @@ public sealed class PlayerApi : IDisposable
         bool Normalize,
         bool WeighByLength,
         bool WeighBySkips,
+        bool SkipSilence,
+        int SilenceThresholdDb,
+        double PlayStart,
+        double PlayEnd,
         float Volume,
         float VolumeLimit,
         bool HasNext,

@@ -1,3 +1,4 @@
+using Barbaric.Core.Analysis;
 using Barbaric.Core.Audio;
 using Barbaric.Core.Library;
 using Barbaric.Core.Playback;
@@ -636,6 +637,140 @@ public sealed class PlaybackControllerTests : IAsyncLifetime
         await _controller.NextAsync();
         Assert.Equal("B", _controller.CurrentTrack?.Title);
     }
+
+    [Fact]
+    public async Task SilenceAroundASong_IsSkipped_AndPlayingToItsEnd_CountsAsAPlay()
+    {
+        await GiveSilenceAsync("A", startMs: 1000, endMs: 4000);
+
+        await _controller.PlayTrackAsync(_ids["A"]);
+        Assert.Equal(1, _engine.Position.TotalSeconds, precision: 2);
+        var played = Seconds(CurrentOutput.DrainToEnd());
+        await WaitUntil(() => _listens.Count == 1);
+
+        Assert.Equal(3, played, precision: 2);
+        Assert.Equal(PlayKind.Complete, _listens[0].Kind);
+    }
+
+    [Fact]
+    public async Task WithSkipSilenceOff_TheWholeSongPlays()
+    {
+        await GiveSilenceAsync("A", startMs: 1000, endMs: 4000);
+        _controller.SkipSilence = false;
+
+        await _controller.PlayTrackAsync(_ids["A"]);
+
+        Assert.Equal(TimeSpan.Zero, _engine.Position);
+        Assert.Equal(5, Seconds(CurrentOutput.DrainToEnd()), precision: 2);
+    }
+
+    [Fact]
+    public async Task TheSilenceThreshold_PicksWhichEdgesApply()
+    {
+        await _library.Tracks.SaveLoudnessAsync(_ids["A"], new LoudnessResult(-20, -14,
+            [.. Silence.Thresholds.Select(db => new SilenceEdge(db, db >= -40 ? 2000 : 1000, 5000))]));
+
+        await _controller.PlayTrackAsync(_ids["A"]);
+        Assert.Equal(1, _engine.Position.TotalSeconds, precision: 2);
+
+        _controller.SilenceThresholdDb = -38;
+        Assert.Equal(-40, _controller.SilenceThresholdDb);
+        Assert.Equal(2, _engine.Position.TotalSeconds, precision: 2);
+    }
+
+    [Fact]
+    public async Task TheUsersOwnTimes_WinOverTheSilence_EvenWithSkippingOff()
+    {
+        await GiveSilenceAsync("A", startMs: 1000, endMs: 4000);
+        await _controller.SetTrimAsync(_ids["A"], 500, 2000);
+        _controller.SkipSilence = false;
+
+        await _controller.PlayTrackAsync(_ids["A"]);
+
+        Assert.Equal(0.5, _engine.Position.TotalSeconds, precision: 2);
+        Assert.Equal(1.5, Seconds(CurrentOutput.DrainToEnd()), precision: 2);
+    }
+
+    [Fact]
+    public async Task OnlyOneOwnTime_KeepsTheSilenceEdgeForTheOther()
+    {
+        await GiveSilenceAsync("A", startMs: 1000, endMs: 4000);
+        await _controller.SetTrimAsync(_ids["A"], null, 3000);
+
+        await _controller.PlayTrackAsync(_ids["A"]);
+
+        Assert.Equal(new PlayRange(1000, 3000), _controller.CurrentRange);
+    }
+
+    [Fact]
+    public async Task OwnTimes_AreKeptInsideTheSong_AndApart()
+    {
+        await _controller.SetTrimAsync(_ids["A"], 4800, 9000);
+
+        var a = await TrackAsync("A");
+        Assert.Equal((5000 - PlaybackController.MinTrimmedMs, 5000L), (a.TrimStartMs, a.TrimEndMs));
+    }
+
+    [Fact]
+    public async Task ChangingTheTimesOfThePlayingSong_AppliesAtOnce()
+    {
+        await _controller.PlayTrackAsync(_ids["A"]);
+        _engine.Seek(TimeSpan.FromSeconds(1));
+
+        await _controller.SetTrimAsync(_ids["A"], null, 2000);
+
+        Assert.Equal(2, _engine.RangeEnd.TotalSeconds, precision: 2);
+        Assert.Equal(1, Seconds(CurrentOutput.DrainToEnd()), precision: 2);
+    }
+
+    [Fact]
+    public async Task Next_EarlyInThePartThatPlays_CountsAsASkip()
+    {
+        // 1.8 s is 36% into the file but only 27% into the part that plays.
+        await GiveSilenceAsync("A", startMs: 1000, endMs: 4000);
+        await _controller.PlayTrackAsync(_ids["A"], ByTitle);
+        _engine.Seek(TimeSpan.FromSeconds(1.8));
+
+        await _controller.NextAsync();
+
+        Assert.Equal(PlayKind.Skip, Assert.Single(_listens).Kind);
+    }
+
+    [Fact]
+    public async Task Previous_SoonAfterTheStart_GoesBack_AndLaterRestartsAtTheStart()
+    {
+        // Counted from where the song starts playing: 4.5 s is 3.5 s in, 3.5 s only 2.5 s.
+        await GiveSilenceAsync("B", startMs: 1000, endMs: 5000);
+        await _controller.PlayTrackAsync(_ids["B"], ByTitle);
+
+        _engine.Seek(TimeSpan.FromSeconds(4.5));
+        await _controller.PreviousAsync();
+        Assert.Equal(("B", 1.0), (_controller.CurrentTrack?.Title, Math.Round(_engine.Position.TotalSeconds, 2)));
+
+        _engine.Seek(TimeSpan.FromSeconds(3.5));
+        await _controller.PreviousAsync();
+        Assert.Equal("A", _controller.CurrentTrack?.Title);
+    }
+
+    [Fact]
+    public async Task SilenceMeasuredWhileLoaded_AppliesToTheLoadedSong()
+    {
+        await _controller.PlayTrackAsync(_ids["A"]);
+        _engine.Pause();
+        var edges = Silence.ToJson([.. Silence.Thresholds.Select(db => new SilenceEdge(db, 1000, 4000))]);
+
+        _controller.UpdateLoudness(_ids["A"], -20, -14, edges);
+
+        Assert.Equal(new PlayRange(1000, 4000), _controller.CurrentRange);
+        Assert.Equal((1.0, 4.0), (Math.Round(_engine.Position.TotalSeconds, 2), Math.Round(_engine.RangeEnd.TotalSeconds, 2)));
+    }
+
+    private Task GiveSilenceAsync(string title, long startMs, long endMs) =>
+        _library.Tracks.SaveLoudnessAsync(_ids[title], new LoudnessResult(-20, -14,
+            [.. Silence.Thresholds.Select(db => new SilenceEdge(db, startMs, endMs))]));
+
+    /// <summary>How long a drained 8 kHz mono float stream (the fixture's songs) plays.</summary>
+    private static double Seconds(byte[] ieeeFloatBytes) => ieeeFloatBytes.Length / (4.0 * 8000);
 
     private async Task<Track> TrackAsync(string title) => (await _library.Tracks.GetAsync(_ids[title]))!;
 

@@ -18,6 +18,13 @@ export interface PlayerSnapshot {
   normalize: boolean
   weighByLength: boolean
   weighBySkips: boolean
+  /** Songs start and end where their sound does. */
+  skipSilence: boolean
+  /** Anything quieter than this counts as silence, in dB below full scale. */
+  silenceThresholdDb: number
+  /** Where the loaded song starts and stops playing, in seconds of the file. */
+  playStart: number
+  playEnd: number
   volume: number
   /** The top of the master volume slider; the volume never goes above it. */
   volumeLimit: number
@@ -37,6 +44,11 @@ export const GAIN_MIN_DB = -24
 export const GAIN_MAX_DB = 12
 export const VOLUME_LIMIT_MIN = 0.01
 
+/** The silence thresholds songs are measured at, in dB; see Silence.cs. */
+export const SILENCE_MIN_DB = -70
+export const SILENCE_MAX_DB = -30
+export const SILENCE_STEP_DB = 5
+
 /** A master volume as a percent of full volume, with a decimal only when it has one: 30%, 7.5%. */
 export const formatVolume = (volume: number) => `${Math.round(volume * 1000) / 10}%`
 
@@ -55,6 +67,10 @@ class Player {
   normalize = $state(true)
   weighByLength = $state(true)
   weighBySkips = $state(true)
+  skipSilence = $state(true)
+  silenceThresholdDb = $state(-50)
+  playStart = $state(0)
+  playEnd = $state(0)
   volume = $state(1)
   volumeLimit = $state(1)
   hasNext = $state(false)
@@ -116,9 +132,10 @@ class Player {
     this.run(() => call('player.setLoop', { on: this.loop }))
   }
 
+  /** Moves within the part of the song that plays. */
   seek = (seconds: number) => {
     if (!this.loaded) return
-    this.position = Math.min(Math.max(seconds, 0), this.duration)
+    this.position = Math.min(Math.max(seconds, this.playStart), this.playEnd || this.duration)
     this.run(() => call('player.seek', { seconds: this.position }))
   }
 
@@ -145,6 +162,18 @@ class Player {
   setWeighBySkips = (on: boolean) => {
     this.weighBySkips = on
     this.run(() => call('player.setWeighBySkips', { on }))
+  }
+
+  /** Starts and ends songs where their sound does. */
+  setSkipSilence = (on: boolean) => {
+    this.skipSilence = on
+    this.run(() => call('player.setSkipSilence', { on }))
+  }
+
+  /** How quiet counts as silence, in dB. */
+  setSilenceThreshold = (db: number) => {
+    this.silenceThresholdDb = db
+    this.run(() => call('player.setSilenceThreshold', { db }))
   }
 
   setVolume = (volume: number) => {
@@ -179,6 +208,10 @@ class Player {
     this.normalize = s.normalize
     this.weighByLength = s.weighByLength
     this.weighBySkips = s.weighBySkips
+    this.skipSilence = s.skipSilence
+    this.silenceThresholdDb = s.silenceThresholdDb
+    this.playStart = s.playStart
+    this.playEnd = s.playEnd
     this.volume = s.volume
     this.volumeLimit = s.volumeLimit
     this.hasNext = s.hasNext

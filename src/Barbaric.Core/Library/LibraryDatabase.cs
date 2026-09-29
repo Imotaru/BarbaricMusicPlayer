@@ -133,6 +133,16 @@ public sealed class LibraryDatabase
         ALTER TABLE tracks ADD COLUMN peak_db REAL;
         ALTER TABLE tracks ADD COLUMN loudness_analyzed INTEGER NOT NULL DEFAULT 0;
         """,
+        """
+        -- Where the sound starts and ends at each silence threshold, found with the loudness, as JSON
+        -- [[db, startMs, endMs], ...]. Every song is measured once more to fill it in.
+        ALTER TABLE tracks ADD COLUMN silence_edges TEXT;
+        UPDATE tracks SET loudness_analyzed = 0;
+
+        -- Where the user wants the song to start and end playing; NULL follows the silence edges.
+        ALTER TABLE tracks ADD COLUMN trim_start_ms INTEGER;
+        ALTER TABLE tracks ADD COLUMN trim_end_ms INTEGER;
+        """,
     ];
 
     private readonly string _connectionString;

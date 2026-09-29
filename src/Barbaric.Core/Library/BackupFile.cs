@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Barbaric.Core.Analysis;
 using Barbaric.Core.Playback;
 
 namespace Barbaric.Core.Library;
@@ -120,6 +121,12 @@ public sealed record BackupSong
     /// <summary>The song's measured volume; absent when it wasn't measured yet.</summary>
     public BackupLoudness? Loudness { get; init; }
 
+    /// <summary>Where the user wants the song to start playing; absent to follow its silence.</summary>
+    public long? TrimStartMs { get; init; }
+
+    /// <summary>Where the user wants the song to stop playing; absent to follow its silence.</summary>
+    public long? TrimEndMs { get; init; }
+
     public long Plays { get; init; }
 
     public long Skips { get; init; }
@@ -137,8 +144,11 @@ public sealed record BackupSong
     public IReadOnlyList<BackupPlayEvent> History { get; init; } = [];
 }
 
-/// <summary>A song's volume measurement; null values mean it was measured as silent or couldn't be decoded.</summary>
-public sealed record BackupLoudness(double? LoudPartLufs, double? PeakDb);
+/// <summary>
+/// A song's volume measurement; null values mean it was measured as silent or couldn't be decoded.
+/// <see cref="Silence"/> is where its sound starts and ends; backups from before it was measured lack it.
+/// </summary>
+public sealed record BackupLoudness(double? LoudPartLufs, double? PeakDb, IReadOnlyList<SilenceEdge>? Silence = null);
 
 public sealed record BackupPlayEvent(DateTimeOffset At, long PlayedMs, long DurationMs, PlayKind Kind);
 

@@ -1,7 +1,7 @@
 // Everything the keyboard and the command palette can do. Shortcuts live in keys.ts (defaults) and
 // the user's preferences (overrides); see keymap.svelte.ts.
 
-import { openBpmEditor, openInfoEditor, openPlaylistPicker, openSkipsEditor, openTagPicker } from './actions'
+import { openBpmEditor, openInfoEditor, openPlaylistPicker, openSkipsEditor, openTagPicker, openTrimEditor } from './actions'
 import { exportBackup, importBackup } from './backup'
 import { library } from './library.svelte'
 import { player } from './player.svelte'
@@ -57,6 +57,13 @@ export const COMMANDS: Command[] = [
 
   { id: 'library.search', label: 'Search', group: 'Songs', inInputs: true, when: listShown, run: focusSearch },
   { id: 'selection.edit', label: 'Edit info of selected songs…', group: 'Songs', when: hasSelection, run: () => openInfoEditor() },
+  {
+    id: 'selection.trim',
+    label: 'Edit start and end of the selected song…',
+    group: 'Songs',
+    when: () => hasSelection() && view() !== 'missing' && library.selectedCount === 1,
+    run: openTrimEditor,
+  },
   { id: 'selection.tag', label: 'Tag selected songs…', group: 'Songs', when: hasSelection, run: () => openTagPicker() },
   { id: 'selection.playlist', label: 'Add selected songs to a playlist…', group: 'Songs', when: hasSelection, run: () => openPlaylistPicker() },
   { id: 'selection.bpm', label: 'Edit BPM of selected songs…', group: 'Songs', when: hasSelection, run: () => openBpmEditor() },
